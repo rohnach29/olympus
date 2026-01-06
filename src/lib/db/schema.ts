@@ -296,6 +296,7 @@ export const sleepSessions = pgTable("sleep_sessions", {
   remSleepMinutes: integer("rem_sleep_minutes").default(0),
   lightSleepMinutes: integer("light_sleep_minutes").default(0),
   awakeMinutes: integer("awake_minutes").default(0),
+  sleepLatencyMinutes: integer("sleep_latency_minutes").default(0), // Time to fall asleep
 
   // Quality metrics
   sleepScore: integer("sleep_score"), // 0-100

@@ -8,6 +8,7 @@
  */
 
 import postgres from "postgres";
+import { calculateSleepScore, SleepSessionData } from "../src/lib/utils/sleep-scoring";
 
 const connectionString = process.env.DATABASE_URL || "postgres://localhost:5432/olympus";
 const sql = postgres(connectionString);
@@ -92,6 +93,7 @@ const SLEEP_CONFIG = {
   deepSleepPercent: { min: 15, max: 25 },
   remSleepPercent: { min: 20, max: 28 },
   awakeMinutes: { min: 5, max: 25 },
+  latencyMinutes: { min: 5, max: 30 }, // Time to fall asleep
 
   // Sleep timing (24-hour format)
   bedtimeHour: { min: 22, max: 24 }, // 10 PM - 12 AM
@@ -127,6 +129,7 @@ interface GeneratedSleep {
   remSleepMinutes: number;
   lightSleepMinutes: number;
   awakeMinutes: number;
+  sleepLatencyMinutes: number;
   sleepScore: number;
   efficiency: string;
   hrvAvg: number;
@@ -205,7 +208,8 @@ function generateSleepSession(userId: string, date: Date): GeneratedSleep {
     SLEEP_CONFIG.sleepDurationMinutes.max
   );
   const awakeMinutes = randomInRange(SLEEP_CONFIG.awakeMinutes.min, SLEEP_CONFIG.awakeMinutes.max);
-  const inBedMinutes = totalSleepMinutes + awakeMinutes;
+  const sleepLatencyMinutes = randomInRange(SLEEP_CONFIG.latencyMinutes.min, SLEEP_CONFIG.latencyMinutes.max);
+  const inBedMinutes = totalSleepMinutes + awakeMinutes + sleepLatencyMinutes;
 
   const wakeTime = new Date(bedtime.getTime() + inBedMinutes * 60 * 1000);
 
@@ -218,13 +222,6 @@ function generateSleepSession(userId: string, date: Date): GeneratedSleep {
   const remSleep = Math.round(totalSleepMinutes * remPercent);
   const lightSleep = Math.round(totalSleepMinutes * lightPercent);
 
-  // Calculate sleep score
-  const efficiency = (totalSleepMinutes / inBedMinutes) * 100;
-  const durationScore = Math.min(100, (totalSleepMinutes / 480) * 100); // 8 hours = 100
-  const stageScore = deepPercent >= 0.15 && remPercent >= 0.20 ? 90 : 75;
-  const efficiencyScore = efficiency >= 85 ? 95 : efficiency >= 75 ? 80 : 65;
-  const sleepScore = Math.round(durationScore * 0.35 + efficiencyScore * 0.35 + stageScore * 0.30);
-
   // Physiological metrics
   const hrvAvg = randomInRange(SLEEP_CONFIG.hrvRange.min, SLEEP_CONFIG.hrvRange.max);
   const restingHr = randomInRange(SLEEP_CONFIG.restingHrRange.min, SLEEP_CONFIG.restingHrRange.max);
@@ -232,6 +229,24 @@ function generateSleepSession(userId: string, date: Date): GeneratedSleep {
     SLEEP_CONFIG.respiratoryRateRange.min,
     SLEEP_CONFIG.respiratoryRateRange.max
   );
+
+  // Calculate efficiency
+  const efficiency = (totalSleepMinutes / inBedMinutes) * 100;
+
+  // Calculate sleep score using evidence-based algorithm
+  const sessionData: SleepSessionData = {
+    totalMinutes: totalSleepMinutes,
+    inBedMinutes,
+    deepSleepMinutes: deepSleep,
+    remSleepMinutes: remSleep,
+    lightSleepMinutes: lightSleep,
+    awakeMinutes,
+    sleepLatencyMinutes,
+    hrvAvg,
+  };
+
+  // No baseline for generated data (new users)
+  const scoreResult = calculateSleepScore(sessionData, null);
 
   return {
     userId,
@@ -244,7 +259,8 @@ function generateSleepSession(userId: string, date: Date): GeneratedSleep {
     remSleepMinutes: remSleep,
     lightSleepMinutes: lightSleep,
     awakeMinutes,
-    sleepScore: Math.min(100, Math.max(0, sleepScore)),
+    sleepLatencyMinutes,
+    sleepScore: scoreResult.totalScore,
     efficiency: efficiency.toFixed(1),
     hrvAvg,
     restingHr,
@@ -447,8 +463,8 @@ async function generateSampleData(userId: string, daysBack: number = 7) {
   if (sleepSessions.length > 0) {
     for (const s of sleepSessions) {
       await sql`
-        INSERT INTO sleep_sessions (user_id, bedtime, wake_time, sleep_date, total_minutes, in_bed_minutes, deep_sleep_minutes, rem_sleep_minutes, light_sleep_minutes, awake_minutes, sleep_score, efficiency, hrv_avg, resting_hr, respiratory_rate, source, metadata)
-        VALUES (${s.userId}, ${s.bedtime}, ${s.wakeTime}, ${s.sleepDate}, ${s.totalMinutes}, ${s.inBedMinutes}, ${s.deepSleepMinutes}, ${s.remSleepMinutes}, ${s.lightSleepMinutes}, ${s.awakeMinutes}, ${s.sleepScore}, ${s.efficiency}, ${s.hrvAvg}, ${s.restingHr}, ${s.respiratoryRate}, ${s.source}, ${JSON.stringify(s.metadata)})
+        INSERT INTO sleep_sessions (user_id, bedtime, wake_time, sleep_date, total_minutes, in_bed_minutes, deep_sleep_minutes, rem_sleep_minutes, light_sleep_minutes, awake_minutes, sleep_latency_minutes, sleep_score, efficiency, hrv_avg, resting_hr, respiratory_rate, source, metadata)
+        VALUES (${s.userId}, ${s.bedtime}, ${s.wakeTime}, ${s.sleepDate}, ${s.totalMinutes}, ${s.inBedMinutes}, ${s.deepSleepMinutes}, ${s.remSleepMinutes}, ${s.lightSleepMinutes}, ${s.awakeMinutes}, ${s.sleepLatencyMinutes}, ${s.sleepScore}, ${s.efficiency}, ${s.hrvAvg}, ${s.restingHr}, ${s.respiratoryRate}, ${s.source}, ${JSON.stringify(s.metadata)})
       `;
     }
     console.log(`   ✅ ${sleepSessions.length} sleep sessions`);

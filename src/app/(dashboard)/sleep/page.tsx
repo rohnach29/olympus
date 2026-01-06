@@ -2,9 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { ScoreRing } from "@/components/dashboard/score-ring";
 import { Progress } from "@/components/ui/progress";
-import { Moon, Clock, Zap, Brain, TrendingUp, BedDouble } from "lucide-react";
+import { Moon, Clock, Zap, Brain, TrendingUp, BedDouble, Info } from "lucide-react";
 import { format } from "date-fns";
 
 interface SleepSession {
@@ -129,6 +137,63 @@ export default function SleepPage() {
               label="Sleep Score"
               sublabel="Last night"
             />
+            <Dialog>
+              <DialogTrigger asChild>
+                <button className="mt-3 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                  <Info className="h-3 w-3" />
+                  How is this calculated?
+                </button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>How Your Sleep Score Works</DialogTitle>
+                  <DialogDescription>
+                    Based on Pittsburgh Sleep Quality Index research
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 text-sm">
+                  <p className="text-muted-foreground">
+                    Your sleep score is a weighted average of 7 components:
+                  </p>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="font-medium">Duration</span>
+                      <span className="text-muted-foreground">20% — 7-9h is optimal</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium">Efficiency</span>
+                      <span className="text-muted-foreground">20% — time asleep vs in bed</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium">Deep Sleep</span>
+                      <span className="text-muted-foreground">15% — 15-20% is ideal</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium">REM Sleep</span>
+                      <span className="text-muted-foreground">15% — 20-25% is ideal</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium">Time to Sleep</span>
+                      <span className="text-muted-foreground">10% — under 15min is best</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium">Awakenings</span>
+                      <span className="text-muted-foreground">10% — less is better</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium">HRV</span>
+                      <span className="text-muted-foreground">10% — vs your baseline</span>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t text-muted-foreground">
+                    <p className="text-xs">
+                      HRV compares tonight to your personal 14-day baseline using statistical analysis,
+                      so scores are personalized to you.
+                    </p>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </CardContent>
         </Card>
 
@@ -268,16 +333,31 @@ export default function SleepPage() {
         </CardHeader>
         <CardContent>
           {sleepTrend.length > 0 ? (
-            <div className="flex justify-between items-end h-[150px] gap-2">
-              {sleepTrend.map((day, i) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                  <div
-                    className="w-full bg-primary/80 rounded-t-lg transition-all"
-                    style={{ height: `${day.score}%` }}
-                  />
-                  <span className="text-xs text-muted-foreground">{day.day}</span>
-                </div>
-              ))}
+            <div className="space-y-2">
+              <div className="flex items-end gap-2 h-[120px]">
+                {sleepTrend.map((day, i) => {
+                  const barHeight = Math.max(day.score, 5); // Minimum 5% for visibility
+                  return (
+                    <div
+                      key={i}
+                      className="flex-1 flex flex-col items-center justify-end h-full"
+                    >
+                      <div className="text-xs font-medium mb-1">{day.score}</div>
+                      <div
+                        className="w-full bg-primary/80 rounded-t-md transition-all min-h-[4px]"
+                        style={{ height: `${barHeight}%` }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex gap-2">
+                {sleepTrend.map((day, i) => (
+                  <div key={i} className="flex-1 text-center">
+                    <span className="text-xs text-muted-foreground">{day.day}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : (
             <div className="h-[150px] flex items-center justify-center text-muted-foreground">
