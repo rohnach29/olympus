@@ -1,284 +1,497 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Search, Utensils, Flame, Beef, Wheat, Droplet } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Coffee,
+  Sun,
+  Moon,
+  Cookie,
+  Trash2,
+  Settings,
+  Flame,
+  Beef,
+  Wheat,
+  Droplets,
+} from "lucide-react";
+import { FoodSearchModal } from "@/components/nutrition/food-search-modal";
+import { GoalSetupModal } from "@/components/nutrition/goal-setup-modal";
 
-// Mock data
-const mockNutritionGoals = {
-  calories: { current: 1450, target: 2000 },
-  protein: { current: 95, target: 150 },
-  carbs: { current: 120, target: 200 },
-  fat: { current: 45, target: 65 },
-};
+interface FoodLog {
+  id: string;
+  foodName: string;
+  brand?: string;
+  servingQuantity: string;
+  servingUnit: string;
+  calories: string;
+  proteinG: string;
+  carbsG: string;
+  fatG: string;
+}
 
-const mockMeals = [
-  {
-    id: "1",
-    meal_type: "breakfast",
-    foods: [
-      { name: "Oatmeal with berries", calories: 320, protein: 12, carbs: 54, fat: 6 },
-      { name: "Greek yogurt", calories: 150, protein: 15, carbs: 8, fat: 5 },
-    ],
-  },
-  {
-    id: "2",
-    meal_type: "lunch",
-    foods: [
-      { name: "Grilled chicken salad", calories: 450, protein: 42, carbs: 18, fat: 22 },
-      { name: "Whole grain bread", calories: 120, protein: 4, carbs: 22, fat: 2 },
-    ],
-  },
-  {
-    id: "3",
-    meal_type: "snack",
-    foods: [
-      { name: "Protein shake", calories: 180, protein: 25, carbs: 8, fat: 3 },
-    ],
-  },
-];
+interface DayData {
+  date: string;
+  logs: {
+    breakfast: FoodLog[];
+    lunch: FoodLog[];
+    dinner: FoodLog[];
+    snack: FoodLog[];
+  };
+  totals: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    fiber: number;
+    sugar: number;
+    saturatedFat: number;
+    sodium: number;
+    cholesterol: number;
+    vitaminA: number;
+    vitaminC: number;
+    vitaminD: number;
+    calcium: number;
+    iron: number;
+    potassium: number;
+  };
+}
 
-const mealTypeLabels: Record<string, string> = {
-  breakfast: "Breakfast",
-  lunch: "Lunch",
-  dinner: "Dinner",
-  snack: "Snack",
-};
+interface Goals {
+  calorieGoal: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+}
+
+const MEAL_CONFIG = [
+  { key: "breakfast", label: "Breakfast", icon: Coffee, color: "text-orange-500" },
+  { key: "lunch", label: "Lunch", icon: Sun, color: "text-yellow-500" },
+  { key: "dinner", label: "Dinner", icon: Moon, color: "text-blue-500" },
+  { key: "snack", label: "Snacks", icon: Cookie, color: "text-pink-500" },
+] as const;
 
 export default function NutritionPage() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showAddFood, setShowAddFood] = useState(false);
+  const [currentDate, setCurrentDate] = useState(new Date().toISOString().split("T")[0]);
+  const [dayData, setDayData] = useState<DayData | null>(null);
+  const [goals, setGoals] = useState<Goals>({ calorieGoal: 2000, proteinG: 150, carbsG: 200, fatG: 65 });
+  const [loading, setLoading] = useState(true);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const [goalModalOpen, setGoalModalOpen] = useState(false);
+  const [selectedMealType, setSelectedMealType] = useState<string>("breakfast");
 
-  const MacroCard = ({
-    label,
-    current,
-    target,
-    unit,
-    icon: Icon,
-    color,
-  }: {
-    label: string;
-    current: number;
-    target: number;
-    unit: string;
-    icon: React.ElementType;
-    color: string;
-  }) => (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center gap-3 mb-3">
-          <div className={`p-2 rounded-lg ${color}`}>
-            <Icon className="h-4 w-4 text-white" />
-          </div>
-          <span className="font-medium">{label}</span>
-        </div>
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">
-              {current} / {target} {unit}
-            </span>
-            <span className="font-medium">
-              {Math.round((current / target) * 100)}%
-            </span>
-          </div>
-          <Progress
-            value={(current / target) * 100}
-            className="h-2"
-            indicatorClassName={color}
-          />
-        </div>
-      </CardContent>
-    </Card>
-  );
+  // Fetch day data
+  const fetchDayData = async () => {
+    try {
+      const response = await fetch(`/api/nutrition/log?date=${currentDate}`);
+      const data = await response.json();
+
+      const emptyTotals = {
+        calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0,
+        sugar: 0, saturatedFat: 0, sodium: 0, cholesterol: 0,
+        vitaminA: 0, vitaminC: 0, vitaminD: 0, calcium: 0, iron: 0, potassium: 0
+      };
+
+      // Make sure we have a valid response structure
+      if (data.logs) {
+        setDayData({
+          ...data,
+          totals: { ...emptyTotals, ...data.totals }
+        });
+      } else {
+        // API returned an error or unexpected format
+        console.error("Invalid API response:", data);
+        setDayData({
+          date: currentDate,
+          logs: { breakfast: [], lunch: [], dinner: [], snack: [] },
+          totals: emptyTotals,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to fetch day data:", error);
+      // Set empty state so UI still renders
+      setDayData({
+        date: currentDate,
+        logs: { breakfast: [], lunch: [], dinner: [], snack: [] },
+        totals: {
+          calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0,
+          sugar: 0, saturatedFat: 0, sodium: 0, cholesterol: 0,
+          vitaminA: 0, vitaminC: 0, vitaminD: 0, calcium: 0, iron: 0, potassium: 0
+        },
+      });
+    }
+  };
+
+  // Fetch goals
+  const fetchGoals = async () => {
+    try {
+      const response = await fetch("/api/nutrition/goals");
+      const data = await response.json();
+      if (data.goals) {
+        setGoals({
+          calorieGoal: data.goals.calorieGoal,
+          proteinG: data.goals.proteinG,
+          carbsG: data.goals.carbsG,
+          fatG: data.goals.fatG,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to fetch goals:", error);
+    }
+  };
+
+  useEffect(() => {
+    const init = async () => {
+      setLoading(true);
+      await Promise.all([fetchDayData(), fetchGoals()]);
+      setLoading(false);
+    };
+    init();
+  }, [currentDate]);
+
+  // Navigate dates
+  const goToPreviousDay = () => {
+    const date = new Date(currentDate);
+    date.setDate(date.getDate() - 1);
+    setCurrentDate(date.toISOString().split("T")[0]);
+  };
+
+  const goToNextDay = () => {
+    const date = new Date(currentDate);
+    date.setDate(date.getDate() + 1);
+    setCurrentDate(date.toISOString().split("T")[0]);
+  };
+
+  const goToToday = () => {
+    setCurrentDate(new Date().toISOString().split("T")[0]);
+  };
+
+  // Format date for display
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr + "T00:00:00");
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (dateStr === today.toISOString().split("T")[0]) {
+      return "Today";
+    } else if (dateStr === yesterday.toISOString().split("T")[0]) {
+      return "Yesterday";
+    } else {
+      return date.toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      });
+    }
+  };
+
+  // Add food to meal
+  const handleAddFood = (mealType: string) => {
+    setSelectedMealType(mealType);
+    setSearchModalOpen(true);
+  };
+
+  // Delete food log
+  const handleDeleteLog = async (logId: string) => {
+    try {
+      await fetch(`/api/nutrition/log?id=${logId}`, { method: "DELETE" });
+      fetchDayData();
+    } catch (error) {
+      console.error("Failed to delete log:", error);
+    }
+  };
+
+  // Handle food logged from modal
+  const handleFoodLogged = () => {
+    setSearchModalOpen(false);
+    fetchDayData();
+  };
+
+  // Handle goals updated
+  const handleGoalsUpdated = () => {
+    setGoalModalOpen(false);
+    fetchGoals();
+  };
+
+  const defaultTotals = {
+    calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0,
+    sugar: 0, saturatedFat: 0, sodium: 0, cholesterol: 0,
+    vitaminA: 0, vitaminC: 0, vitaminD: 0, calcium: 0, iron: 0, potassium: 0
+  };
+  const totals = dayData?.totals ? { ...defaultTotals, ...dayData.totals } : defaultTotals;
+  const caloriesRemaining = goals.calorieGoal - totals.calories;
+
+  // Calculate macro split based on actual macro calories (not logged calories)
+  const macroCalories = {
+    protein: totals.protein * 4,
+    carbs: totals.carbs * 4,
+    fat: totals.fat * 9,
+  };
+  const totalMacroCalories = macroCalories.protein + macroCalories.carbs + macroCalories.fat;
+  const macroPercents = {
+    protein: totalMacroCalories > 0 ? Math.round((macroCalories.protein / totalMacroCalories) * 100) : 0,
+    carbs: totalMacroCalories > 0 ? Math.round((macroCalories.carbs / totalMacroCalories) * 100) : 0,
+    fat: totalMacroCalories > 0 ? Math.round((macroCalories.fat / totalMacroCalories) * 100) : 0,
+  };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header with date navigation */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Nutrition</h1>
           <p className="text-muted-foreground">Track your daily food intake</p>
         </div>
-        <Button onClick={() => setShowAddFood(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Food
+        <Button variant="outline" size="sm" onClick={() => setGoalModalOpen(true)}>
+          <Settings className="h-4 w-4 mr-2" />
+          Goals
         </Button>
       </div>
 
-      {/* Macro Overview */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <MacroCard
-          label="Calories"
-          current={mockNutritionGoals.calories.current}
-          target={mockNutritionGoals.calories.target}
-          unit="kcal"
-          icon={Flame}
-          color="bg-orange-500"
-        />
-        <MacroCard
-          label="Protein"
-          current={mockNutritionGoals.protein.current}
-          target={mockNutritionGoals.protein.target}
-          unit="g"
-          icon={Beef}
-          color="bg-red-500"
-        />
-        <MacroCard
-          label="Carbs"
-          current={mockNutritionGoals.carbs.current}
-          target={mockNutritionGoals.carbs.target}
-          unit="g"
-          icon={Wheat}
-          color="bg-amber-500"
-        />
-        <MacroCard
-          label="Fat"
-          current={mockNutritionGoals.fat.current}
-          target={mockNutritionGoals.fat.target}
-          unit="g"
-          icon={Droplet}
-          color="bg-blue-500"
-        />
+      {/* Date Navigation */}
+      <div className="flex items-center justify-center gap-4">
+        <Button variant="ghost" size="icon" onClick={goToPreviousDay}>
+          <ChevronLeft className="h-5 w-5" />
+        </Button>
+        <Button variant="outline" onClick={goToToday} className="min-w-[140px]">
+          {formatDate(currentDate)}
+        </Button>
+        <Button variant="ghost" size="icon" onClick={goToNextDay}>
+          <ChevronRight className="h-5 w-5" />
+        </Button>
       </div>
 
-      {/* Food Log */}
+      {/* Daily Summary */}
       <Card>
-        <CardHeader>
-          <CardTitle>Today&apos;s Food Log</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="all" className="w-full">
-            <TabsList className="mb-4">
-              <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="breakfast">Breakfast</TabsTrigger>
-              <TabsTrigger value="lunch">Lunch</TabsTrigger>
-              <TabsTrigger value="dinner">Dinner</TabsTrigger>
-              <TabsTrigger value="snack">Snacks</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="all" className="space-y-4">
-              {mockMeals.map((meal) => (
-                <div key={meal.id} className="space-y-2">
-                  <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
-                    {mealTypeLabels[meal.meal_type]}
-                  </h3>
-                  <div className="space-y-2">
-                    {meal.foods.map((food, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-primary/10">
-                            <Utensils className="h-4 w-4 text-primary" />
-                          </div>
-                          <span className="font-medium">{food.name}</span>
-                        </div>
-                        <div className="flex items-center gap-6 text-sm text-muted-foreground">
-                          <span>{food.calories} kcal</span>
-                          <span>{food.protein}g P</span>
-                          <span>{food.carbs}g C</span>
-                          <span>{food.fat}g F</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-
-              {/* Add more meals prompt */}
-              <div className="pt-4">
-                <Button variant="outline" className="w-full" onClick={() => setShowAddFood(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Dinner
-                </Button>
+        <CardContent className="pt-6">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            {/* Calories */}
+            <div className="col-span-2 md:col-span-1 text-center p-4 bg-muted/50 rounded-lg">
+              <Flame className="h-6 w-6 mx-auto mb-2 text-orange-500" />
+              <div className="text-3xl font-bold">{Math.round(totals.calories)}</div>
+              <div className="text-sm text-muted-foreground">/ {goals.calorieGoal} kcal</div>
+              <Progress
+                value={Math.min((totals.calories / goals.calorieGoal) * 100, 100)}
+                className="mt-2 h-2"
+              />
+              <div className="text-xs mt-1 text-muted-foreground">
+                {caloriesRemaining > 0 ? `${Math.round(caloriesRemaining)} left` : `${Math.round(-caloriesRemaining)} over`}
               </div>
-            </TabsContent>
+            </div>
 
-            {["breakfast", "lunch", "dinner", "snack"].map((mealType) => (
-              <TabsContent key={mealType} value={mealType} className="space-y-2">
-                {mockMeals
-                  .filter((m) => m.meal_type === mealType)
-                  .flatMap((meal) =>
-                    meal.foods.map((food, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-primary/10">
-                            <Utensils className="h-4 w-4 text-primary" />
-                          </div>
-                          <span className="font-medium">{food.name}</span>
-                        </div>
-                        <div className="flex items-center gap-6 text-sm text-muted-foreground">
-                          <span>{food.calories} kcal</span>
-                          <span>{food.protein}g P</span>
-                          <span>{food.carbs}g C</span>
-                          <span>{food.fat}g F</span>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                {mockMeals.filter((m) => m.meal_type === mealType).length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Utensils className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>No {mealTypeLabels[mealType].toLowerCase()} logged yet</p>
-                    <Button variant="link" onClick={() => setShowAddFood(true)}>
-                      Add food
-                    </Button>
-                  </div>
-                )}
-              </TabsContent>
-            ))}
-          </Tabs>
+            {/* Protein */}
+            <div className="text-center p-4 bg-muted/50 rounded-lg">
+              <Beef className="h-5 w-5 mx-auto mb-2 text-red-500" />
+              <div className="text-2xl font-bold">{Math.round(totals.protein)}g</div>
+              <div className="text-xs text-muted-foreground">/ {goals.proteinG}g protein</div>
+              <Progress
+                value={Math.min((totals.protein / goals.proteinG) * 100, 100)}
+                className="mt-2 h-1.5"
+              />
+            </div>
+
+            {/* Carbs */}
+            <div className="text-center p-4 bg-muted/50 rounded-lg">
+              <Wheat className="h-5 w-5 mx-auto mb-2 text-amber-500" />
+              <div className="text-2xl font-bold">{Math.round(totals.carbs)}g</div>
+              <div className="text-xs text-muted-foreground">/ {goals.carbsG}g carbs</div>
+              <Progress
+                value={Math.min((totals.carbs / goals.carbsG) * 100, 100)}
+                className="mt-2 h-1.5"
+              />
+            </div>
+
+            {/* Fat */}
+            <div className="text-center p-4 bg-muted/50 rounded-lg">
+              <Droplets className="h-5 w-5 mx-auto mb-2 text-blue-500" />
+              <div className="text-2xl font-bold">{Math.round(totals.fat)}g</div>
+              <div className="text-xs text-muted-foreground">/ {goals.fatG}g fat</div>
+              <Progress
+                value={Math.min((totals.fat / goals.fatG) * 100, 100)}
+                className="mt-2 h-1.5"
+              />
+            </div>
+
+            {/* Macro Pie (visual) */}
+            <div className="hidden md:flex flex-col items-center justify-center p-4 bg-muted/50 rounded-lg">
+              <div className="text-sm font-medium mb-2">Macro Split</div>
+              <div className="flex gap-2 text-xs">
+                <span className="text-red-500">P: {macroPercents.protein}%</span>
+                <span className="text-amber-500">C: {macroPercents.carbs}%</span>
+                <span className="text-blue-500">F: {macroPercents.fat}%</span>
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Quick Add Modal (simplified inline for now) */}
-      {showAddFood && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-md">
-            <CardHeader>
-              <CardTitle>Add Food</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search foods..."
-                  className="pl-10"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
+      {/* Micronutrients Section */}
+      {totals.calories > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Micronutrients</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 text-sm">
+              {/* Additional Macros */}
+              <div className="p-2 bg-muted/30 rounded">
+                <div className="text-xs text-muted-foreground">Fiber</div>
+                <div className="font-medium">{totals.fiber.toFixed(1)}g</div>
+              </div>
+              <div className="p-2 bg-muted/30 rounded">
+                <div className="text-xs text-muted-foreground">Sugar</div>
+                <div className="font-medium">{totals.sugar.toFixed(1)}g</div>
+              </div>
+              <div className="p-2 bg-muted/30 rounded">
+                <div className="text-xs text-muted-foreground">Sat. Fat</div>
+                <div className="font-medium">{totals.saturatedFat.toFixed(1)}g</div>
+              </div>
+              <div className="p-2 bg-muted/30 rounded">
+                <div className="text-xs text-muted-foreground">Cholesterol</div>
+                <div className="font-medium">{Math.round(totals.cholesterol)}mg</div>
+              </div>
+              <div className="p-2 bg-muted/30 rounded">
+                <div className="text-xs text-muted-foreground">Sodium</div>
+                <div className="font-medium">{Math.round(totals.sodium)}mg</div>
               </div>
 
-              <div className="space-y-2">
-                <Label>Or add manually</Label>
-                <Input placeholder="Food name" />
-                <div className="grid grid-cols-2 gap-2">
-                  <Input placeholder="Calories" type="number" />
-                  <Input placeholder="Protein (g)" type="number" />
-                  <Input placeholder="Carbs (g)" type="number" />
-                  <Input placeholder="Fat (g)" type="number" />
-                </div>
+              {/* Vitamins */}
+              <div className="p-2 bg-muted/30 rounded">
+                <div className="text-xs text-muted-foreground">Vitamin A</div>
+                <div className="font-medium">{Math.round(totals.vitaminA)}mcg</div>
+              </div>
+              <div className="p-2 bg-muted/30 rounded">
+                <div className="text-xs text-muted-foreground">Vitamin C</div>
+                <div className="font-medium">{totals.vitaminC.toFixed(1)}mg</div>
+              </div>
+              <div className="p-2 bg-muted/30 rounded">
+                <div className="text-xs text-muted-foreground">Vitamin D</div>
+                <div className="font-medium">{totals.vitaminD.toFixed(1)}mcg</div>
               </div>
 
-              <div className="flex gap-2 justify-end">
-                <Button variant="outline" onClick={() => setShowAddFood(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={() => setShowAddFood(false)}>Add Food</Button>
+              {/* Minerals */}
+              <div className="p-2 bg-muted/30 rounded">
+                <div className="text-xs text-muted-foreground">Calcium</div>
+                <div className="font-medium">{Math.round(totals.calcium)}mg</div>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+              <div className="p-2 bg-muted/30 rounded">
+                <div className="text-xs text-muted-foreground">Iron</div>
+                <div className="font-medium">{totals.iron.toFixed(1)}mg</div>
+              </div>
+              <div className="p-2 bg-muted/30 rounded">
+                <div className="text-xs text-muted-foreground">Potassium</div>
+                <div className="font-medium">{Math.round(totals.potassium)}mg</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
+
+      {/* Meal Sections */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {MEAL_CONFIG.map((meal) => {
+          const mealLogs = dayData?.logs?.[meal.key] || [];
+          const mealCalories = mealLogs.reduce((sum, log) => sum + Number(log.calories), 0);
+
+          return (
+            <Card key={meal.key}>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <meal.icon className={`h-5 w-5 ${meal.color}`} />
+                    {meal.label}
+                    {mealCalories > 0 && (
+                      <span className="text-sm font-normal text-muted-foreground">
+                        ({Math.round(mealCalories)} kcal)
+                      </span>
+                    )}
+                  </CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleAddFood(meal.key)}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {mealLogs.length === 0 ? (
+                  <button
+                    onClick={() => handleAddFood(meal.key)}
+                    className="w-full py-8 border-2 border-dashed border-muted-foreground/25 rounded-lg text-muted-foreground hover:border-muted-foreground/50 hover:text-foreground transition-colors"
+                  >
+                    <Plus className="h-5 w-5 mx-auto mb-1" />
+                    <span className="text-sm">Add food</span>
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    {mealLogs.map((log) => (
+                      <div
+                        key={log.id}
+                        className="flex items-center justify-between p-3 bg-muted/50 rounded-lg group"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium truncate">{log.foodName}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {log.servingQuantity} {log.servingUnit} •{" "}
+                            {Math.round(Number(log.calories))} kcal
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-xs text-right hidden sm:block">
+                            <div>P: {Math.round(Number(log.proteinG))}g</div>
+                            <div>C: {Math.round(Number(log.carbsG))}g</div>
+                            <div>F: {Math.round(Number(log.fatG))}g</div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => handleDeleteLog(log.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => handleAddFood(meal.key)}
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add more
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Food Search Modal */}
+      <FoodSearchModal
+        open={searchModalOpen}
+        onClose={() => setSearchModalOpen(false)}
+        mealType={selectedMealType}
+        loggedDate={currentDate}
+        onFoodLogged={handleFoodLogged}
+      />
+
+      {/* Goal Setup Modal */}
+      <GoalSetupModal
+        open={goalModalOpen}
+        onClose={() => setGoalModalOpen(false)}
+        onGoalsUpdated={handleGoalsUpdated}
+      />
     </div>
   );
 }

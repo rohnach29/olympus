@@ -58,7 +58,186 @@ export const healthMetrics = pgTable("health_metrics", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Nutrition logs
+// Foods database
+export const foods = pgTable("foods", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  source: text("source").notNull().default("usda"), // 'usda', 'open_food_facts', 'user'
+  sourceId: text("source_id").unique(), // Original ID from source database (unique for deduplication)
+  name: text("name").notNull(),
+  brand: text("brand"),
+  barcode: text("barcode"),
+  category: text("category"),
+
+  // Serving info
+  servingSize: numeric("serving_size").notNull().default("100"),
+  servingUnit: text("serving_unit").notNull().default("g"),
+  servingSizeDescription: text("serving_size_description"), // e.g., "1 cup", "1 medium"
+
+  // Macronutrients (per serving)
+  calories: numeric("calories").notNull().default("0"),
+  proteinG: numeric("protein_g").notNull().default("0"),
+  fatG: numeric("fat_g").notNull().default("0"),
+  saturatedFatG: numeric("saturated_fat_g").default("0"),
+  transFatG: numeric("trans_fat_g").default("0"),
+  monounsaturatedFatG: numeric("monounsaturated_fat_g").default("0"),
+  polyunsaturatedFatG: numeric("polyunsaturated_fat_g").default("0"),
+  carbsG: numeric("carbs_g").notNull().default("0"),
+  fiberG: numeric("fiber_g").default("0"),
+  sugarG: numeric("sugar_g").default("0"),
+  addedSugarG: numeric("added_sugar_g").default("0"),
+
+  // Micronutrients - Vitamins (per serving)
+  vitaminAMcg: numeric("vitamin_a_mcg").default("0"),
+  vitaminCMg: numeric("vitamin_c_mg").default("0"),
+  vitaminDMcg: numeric("vitamin_d_mcg").default("0"),
+  vitaminEMg: numeric("vitamin_e_mg").default("0"),
+  vitaminKMcg: numeric("vitamin_k_mcg").default("0"),
+  thiaminMg: numeric("thiamin_mg").default("0"),
+  riboflavinMg: numeric("riboflavin_mg").default("0"),
+  niacinMg: numeric("niacin_mg").default("0"),
+  vitaminB6Mg: numeric("vitamin_b6_mg").default("0"),
+  folateMcg: numeric("folate_mcg").default("0"),
+  vitaminB12Mcg: numeric("vitamin_b12_mcg").default("0"),
+
+  // Micronutrients - Minerals (per serving)
+  calciumMg: numeric("calcium_mg").default("0"),
+  ironMg: numeric("iron_mg").default("0"),
+  magnesiumMg: numeric("magnesium_mg").default("0"),
+  phosphorusMg: numeric("phosphorus_mg").default("0"),
+  potassiumMg: numeric("potassium_mg").default("0"),
+  sodiumMg: numeric("sodium_mg").default("0"),
+  zincMg: numeric("zinc_mg").default("0"),
+  copperMg: numeric("copper_mg").default("0"),
+  manganeseMg: numeric("manganese_mg").default("0"),
+  seleniumMcg: numeric("selenium_mcg").default("0"),
+
+  // Other
+  cholesterolMg: numeric("cholesterol_mg").default("0"),
+  caffeineMg: numeric("caffeine_mg").default("0"),
+  waterG: numeric("water_g").default("0"),
+
+  // Metadata
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  isVerified: boolean("is_verified").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Food logs (user's daily food entries)
+export const foodLogs = pgTable("food_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  foodId: uuid("food_id").references(() => foods.id, { onDelete: "set null" }),
+
+  // Denormalized food data (in case food is deleted or for custom entries)
+  foodName: text("food_name").notNull(),
+  brand: text("brand"),
+
+  // Serving info
+  servingQuantity: numeric("serving_quantity").notNull().default("1"),
+  servingUnit: text("serving_unit").notNull().default("g"),
+  servingSize: numeric("serving_size").notNull(), // Actual grams consumed
+
+  // Calculated nutrition (based on serving)
+  calories: numeric("calories").notNull().default("0"),
+  proteinG: numeric("protein_g").notNull().default("0"),
+  fatG: numeric("fat_g").notNull().default("0"),
+  carbsG: numeric("carbs_g").notNull().default("0"),
+  fiberG: numeric("fiber_g").default("0"),
+  sugarG: numeric("sugar_g").default("0"),
+  saturatedFatG: numeric("saturated_fat_g").default("0"),
+
+  // Micronutrients
+  sodiumMg: numeric("sodium_mg").default("0"),
+  cholesterolMg: numeric("cholesterol_mg").default("0"),
+  vitaminAMcg: numeric("vitamin_a_mcg").default("0"),
+  vitaminCMg: numeric("vitamin_c_mg").default("0"),
+  vitaminDMcg: numeric("vitamin_d_mcg").default("0"),
+  calciumMg: numeric("calcium_mg").default("0"),
+  ironMg: numeric("iron_mg").default("0"),
+  potassiumMg: numeric("potassium_mg").default("0"),
+
+  // Meal info
+  mealType: text("meal_type").notNull(), // 'breakfast', 'lunch', 'dinner', 'snack'
+  loggedDate: date("logged_date").notNull(), // Date for the log (allows past dates)
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Nutrition goals
+export const nutritionGoals = pgTable("nutrition_goals", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+
+  // Calorie goal
+  calorieGoal: integer("calorie_goal").notNull().default(2000),
+
+  // Macro goals - grams
+  proteinG: integer("protein_g").notNull().default(150),
+  carbsG: integer("carbs_g").notNull().default(200),
+  fatG: integer("fat_g").notNull().default(65),
+  fiberG: integer("fiber_g").default(30),
+
+  // Macro goals - percentages (alternative)
+  proteinPercent: integer("protein_percent").default(30),
+  carbsPercent: integer("carbs_percent").default(40),
+  fatPercent: integer("fat_percent").default(30),
+
+  // Which mode to use
+  usePercentages: boolean("use_percentages").default(false),
+
+  // Calculator inputs (stored for recalculation)
+  activityLevel: text("activity_level").default("moderate"), // sedentary, light, moderate, active, very_active
+  goal: text("goal").default("maintain"), // lose, maintain, gain
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Favorite foods (for quick access)
+export const favoriteFoods = pgTable("favorite_foods", {
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  foodId: uuid("food_id")
+    .notNull()
+    .references(() => foods.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.foodId] }),
+}));
+
+// Recent foods (auto-tracked for quick access)
+export const recentFoods = pgTable("recent_foods", {
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  foodId: uuid("food_id")
+    .notNull()
+    .references(() => foods.id, { onDelete: "cascade" }),
+  lastUsedAt: timestamp("last_used_at").defaultNow().notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.foodId] }),
+}));
+
+// Food portions (common serving sizes like "1 medium apple")
+export const foodPortions = pgTable("food_portions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  foodId: uuid("food_id")
+    .notNull()
+    .references(() => foods.id, { onDelete: "cascade" }),
+  portionName: text("portion_name").notNull(), // e.g., "1 medium", "1 cup", "1 slice"
+  gramWeight: numeric("gram_weight").notNull(), // grams for this portion
+  isDefault: boolean("is_default").default(false), // show as default option
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Legacy nutrition logs (keeping for backward compatibility)
 export const nutritionLogs = pgTable("nutrition_logs", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id")
@@ -72,7 +251,7 @@ export const nutritionLogs = pgTable("nutrition_logs", {
   fatG: numeric("fat_g").notNull().default("0"),
   fiberG: numeric("fiber_g").default("0"),
   micronutrients: jsonb("micronutrients").default({}),
-  mealType: text("meal_type").notNull(), // 'breakfast', 'lunch', 'dinner', 'snack'
+  mealType: text("meal_type").notNull(),
   loggedAt: timestamp("logged_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -145,6 +324,12 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
 export type HealthMetric = typeof healthMetrics.$inferSelect;
+export type Food = typeof foods.$inferSelect;
+export type NewFood = typeof foods.$inferInsert;
+export type FoodLog = typeof foodLogs.$inferSelect;
+export type NewFoodLog = typeof foodLogs.$inferInsert;
+export type FoodPortion = typeof foodPortions.$inferSelect;
+export type NutritionGoal = typeof nutritionGoals.$inferSelect;
 export type NutritionLog = typeof nutritionLogs.$inferSelect;
 export type Workout = typeof workouts.$inferSelect;
 export type DailyScore = typeof dailyScores.$inferSelect;
