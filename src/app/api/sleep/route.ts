@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { db, sleepSessions } from "@/lib/db";
 import { eq, and, desc } from "drizzle-orm";
+import {
+  calculateSleepScore,
+  calculatePersonalBaseline,
+  SleepSessionData,
+} from "@/lib/utils/sleep-scoring";
 
 // GET - Get sleep sessions
 export async function GET(request: NextRequest) {
@@ -41,21 +46,28 @@ export async function GET(request: NextRequest) {
 
     const latest = results[0] || null;
 
-    // Calculate weekly average
+    // Calculate weekly average (only count sessions with valid data)
+    const sessionsWithScores = results.filter((s) => s.sleepScore !== null);
     const weeklyAvg =
       results.length > 0
         ? {
-            avgScore: Math.round(
-              results.reduce((sum, s) => sum + (s.sleepScore || 0), 0) /
-                results.length
-            ),
+            avgScore:
+              sessionsWithScores.length > 0
+                ? Math.round(
+                    sessionsWithScores.reduce((sum, s) => sum + (s.sleepScore || 0), 0) /
+                      sessionsWithScores.length
+                  )
+                : 0,
             avgDurationMinutes: Math.round(
               results.reduce((sum, s) => sum + s.totalMinutes, 0) /
                 results.length
             ),
             avgEfficiency:
-              results.reduce((sum, s) => sum + Number(s.efficiency || 0), 0) /
-              results.length,
+              Math.round(
+                (results.reduce((sum, s) => sum + Number(s.efficiency || 0), 0) /
+                  results.length) *
+                  10
+              ) / 10,
             avgDeepMinutes: Math.round(
               results.reduce((sum, s) => sum + (s.deepSleepMinutes || 0), 0) /
                 results.length
@@ -67,10 +79,41 @@ export async function GET(request: NextRequest) {
           }
         : null;
 
+    // Calculate score breakdown for latest session
+    let scoreDetails = null;
+    if (latest) {
+      // Convert results to SleepSessionData for baseline calculation
+      const historyData: SleepSessionData[] = results.map((s) => ({
+        totalMinutes: s.totalMinutes,
+        inBedMinutes: s.inBedMinutes,
+        deepSleepMinutes: s.deepSleepMinutes || 0,
+        remSleepMinutes: s.remSleepMinutes || 0,
+        lightSleepMinutes: s.lightSleepMinutes || 0,
+        awakeMinutes: s.awakeMinutes || 0,
+        sleepLatencyMinutes: s.sleepLatencyMinutes || 0,
+        hrvAvg: s.hrvAvg,
+      }));
+
+      const baseline = calculatePersonalBaseline(historyData);
+      const latestData: SleepSessionData = {
+        totalMinutes: latest.totalMinutes,
+        inBedMinutes: latest.inBedMinutes,
+        deepSleepMinutes: latest.deepSleepMinutes || 0,
+        remSleepMinutes: latest.remSleepMinutes || 0,
+        lightSleepMinutes: latest.lightSleepMinutes || 0,
+        awakeMinutes: latest.awakeMinutes || 0,
+        sleepLatencyMinutes: latest.sleepLatencyMinutes || 0,
+        hrvAvg: latest.hrvAvg,
+      };
+
+      scoreDetails = calculateSleepScore(latestData, baseline);
+    }
+
     return NextResponse.json({
       sessions: results,
       latest,
       weeklyAverage: weeklyAvg,
+      scoreDetails,
     });
   } catch (error) {
     console.error("Get sleep sessions error:", error);
@@ -100,7 +143,7 @@ export async function POST(request: NextRequest) {
       remSleepMinutes,
       lightSleepMinutes,
       awakeMinutes,
-      sleepScore,
+      sleepLatencyMinutes,
       efficiency,
       hrvAvg,
       restingHr,
@@ -115,6 +158,48 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Fetch user's sleep history for baseline calculation
+    const history = await db
+      .select()
+      .from(sleepSessions)
+      .where(eq(sleepSessions.userId, user.id))
+      .orderBy(desc(sleepSessions.sleepDate))
+      .limit(14);
+
+    // Convert to SleepSessionData format
+    const historyData: SleepSessionData[] = history.map((s) => ({
+      totalMinutes: s.totalMinutes,
+      inBedMinutes: s.inBedMinutes,
+      deepSleepMinutes: s.deepSleepMinutes || 0,
+      remSleepMinutes: s.remSleepMinutes || 0,
+      lightSleepMinutes: s.lightSleepMinutes || 0,
+      awakeMinutes: s.awakeMinutes || 0,
+      sleepLatencyMinutes: s.sleepLatencyMinutes || 0,
+      hrvAvg: s.hrvAvg,
+    }));
+
+    // Calculate personal baseline from history
+    const baseline = calculatePersonalBaseline(historyData);
+
+    // Prepare current session data for scoring
+    const sessionData: SleepSessionData = {
+      totalMinutes,
+      inBedMinutes,
+      deepSleepMinutes: deepSleepMinutes || 0,
+      remSleepMinutes: remSleepMinutes || 0,
+      lightSleepMinutes: lightSleepMinutes || 0,
+      awakeMinutes: awakeMinutes || 0,
+      sleepLatencyMinutes: sleepLatencyMinutes || 0,
+      hrvAvg: hrvAvg || null,
+    };
+
+    // Calculate sleep score using evidence-based algorithm
+    const scoreResult = calculateSleepScore(sessionData, baseline);
+
+    // Calculate efficiency if not provided
+    const calculatedEfficiency =
+      efficiency || ((totalMinutes / inBedMinutes) * 100).toFixed(1);
+
     const [session] = await db
       .insert(sleepSessions)
       .values({
@@ -128,8 +213,9 @@ export async function POST(request: NextRequest) {
         remSleepMinutes: remSleepMinutes || 0,
         lightSleepMinutes: lightSleepMinutes || 0,
         awakeMinutes: awakeMinutes || 0,
-        sleepScore: sleepScore || null,
-        efficiency: efficiency || null,
+        sleepLatencyMinutes: sleepLatencyMinutes || 0,
+        sleepScore: scoreResult.totalScore,
+        efficiency: calculatedEfficiency,
         hrvAvg: hrvAvg || null,
         restingHr: restingHr || null,
         respiratoryRate: respiratoryRate || null,
@@ -137,7 +223,13 @@ export async function POST(request: NextRequest) {
       })
       .returning();
 
-    return NextResponse.json({ session }, { status: 201 });
+    return NextResponse.json(
+      {
+        session,
+        scoreDetails: scoreResult,
+      },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Create sleep session error:", error);
     return NextResponse.json(
