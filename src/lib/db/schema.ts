@@ -262,7 +262,7 @@ export const workouts = pgTable("workouts", {
   userId: uuid("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  type: text("type").notNull(),
+  type: text("type").notNull(), // 'strength', 'running', 'cycling', 'swimming', 'yoga', 'hiit', 'sports', 'walking', 'other'
   name: text("name").notNull(),
   durationMinutes: integer("duration_minutes").notNull(),
   caloriesBurned: integer("calories_burned"),
@@ -271,6 +271,43 @@ export const workouts = pgTable("workouts", {
   startedAt: timestamp("started_at").notNull(),
   endedAt: timestamp("ended_at").notNull(),
   notes: text("notes"),
+  metadata: jsonb("metadata").default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Sleep sessions (Apple Health style)
+export const sleepSessions = pgTable("sleep_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+
+  // Timing
+  bedtime: timestamp("bedtime").notNull(),
+  wakeTime: timestamp("wake_time").notNull(),
+  sleepDate: date("sleep_date").notNull(), // The night this sleep belongs to (YYYY-MM-DD)
+
+  // Duration (in minutes)
+  totalMinutes: integer("total_minutes").notNull(), // Total time asleep
+  inBedMinutes: integer("in_bed_minutes").notNull(), // Total time in bed
+
+  // Apple Health sleep stages (in minutes)
+  deepSleepMinutes: integer("deep_sleep_minutes").default(0),
+  remSleepMinutes: integer("rem_sleep_minutes").default(0),
+  lightSleepMinutes: integer("light_sleep_minutes").default(0),
+  awakeMinutes: integer("awake_minutes").default(0),
+
+  // Quality metrics
+  sleepScore: integer("sleep_score"), // 0-100
+  efficiency: numeric("efficiency"), // percentage (time asleep / time in bed)
+
+  // Physiological data during sleep
+  hrvAvg: integer("hrv_avg"), // Heart rate variability in ms
+  restingHr: integer("resting_hr"), // Resting heart rate during sleep
+  respiratoryRate: numeric("respiratory_rate"), // Breaths per minute
+
+  // Source and metadata
+  source: text("source").notNull().default("manual"), // 'manual', 'apple_health', 'whoop', 'oura'
   metadata: jsonb("metadata").default({}),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -324,6 +361,7 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
 export type HealthMetric = typeof healthMetrics.$inferSelect;
+export type NewHealthMetric = typeof healthMetrics.$inferInsert;
 export type Food = typeof foods.$inferSelect;
 export type NewFood = typeof foods.$inferInsert;
 export type FoodLog = typeof foodLogs.$inferSelect;
@@ -332,6 +370,10 @@ export type FoodPortion = typeof foodPortions.$inferSelect;
 export type NutritionGoal = typeof nutritionGoals.$inferSelect;
 export type NutritionLog = typeof nutritionLogs.$inferSelect;
 export type Workout = typeof workouts.$inferSelect;
+export type NewWorkout = typeof workouts.$inferInsert;
+export type SleepSession = typeof sleepSessions.$inferSelect;
+export type NewSleepSession = typeof sleepSessions.$inferInsert;
 export type DailyScore = typeof dailyScores.$inferSelect;
+export type NewDailyScore = typeof dailyScores.$inferInsert;
 export type BloodWorkResult = typeof bloodWork.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;

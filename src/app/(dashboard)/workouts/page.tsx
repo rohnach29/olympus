@@ -1,48 +1,108 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Plus, Dumbbell, Clock, Flame, Heart, TrendingUp } from "lucide-react";
+import {
+  Plus,
+  Dumbbell,
+  Clock,
+  Flame,
+  Heart,
+  TrendingUp,
+  Activity,
+  Bike,
+  Waves,
+  Footprints,
+  Zap,
+} from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 
-const mockWorkouts = [
-  {
-    id: "1",
-    name: "Morning Run",
-    type: "running",
-    duration: 32,
-    calories: 320,
-    heartRateAvg: 145,
-    date: "Today, 7:30 AM",
-  },
-  {
-    id: "2",
-    name: "Upper Body Strength",
-    type: "strength",
-    duration: 45,
-    calories: 280,
-    heartRateAvg: 125,
-    date: "Yesterday",
-  },
-  {
-    id: "3",
-    name: "HIIT Session",
-    type: "hiit",
-    duration: 25,
-    calories: 310,
-    heartRateAvg: 155,
-    date: "2 days ago",
-  },
-];
+interface Workout {
+  id: string;
+  type: string;
+  name: string;
+  durationMinutes: number;
+  caloriesBurned: number | null;
+  heartRateAvg: number | null;
+  heartRateMax: number | null;
+  startedAt: string;
+  endedAt: string;
+}
 
-const weeklyGoal = {
-  current: 4,
-  target: 5,
-  minutes: 142,
-  targetMinutes: 150,
+interface WorkoutSummary {
+  count: number;
+  totalMinutes: number;
+  totalCalories: number;
+}
+
+const WORKOUT_ICONS: Record<string, React.ReactNode> = {
+  strength: <Dumbbell className="h-5 w-5 text-primary" />,
+  running: <Footprints className="h-5 w-5 text-green-500" />,
+  cycling: <Bike className="h-5 w-5 text-blue-500" />,
+  swimming: <Waves className="h-5 w-5 text-cyan-500" />,
+  hiit: <Zap className="h-5 w-5 text-orange-500" />,
+  yoga: <Activity className="h-5 w-5 text-purple-500" />,
+  walking: <Footprints className="h-5 w-5 text-emerald-500" />,
+  sports: <Activity className="h-5 w-5 text-red-500" />,
+};
+
+const WEEKLY_GOALS = {
+  workouts: 5,
+  minutes: 150,
 };
 
 export default function WorkoutsPage() {
+  const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [summary, setSummary] = useState<WorkoutSummary>({
+    count: 0,
+    totalMinutes: 0,
+    totalCalories: 0,
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchWorkouts = async () => {
+      try {
+        const response = await fetch("/api/workouts?limit=10");
+        const data = await response.json();
+
+        if (data.workouts) {
+          setWorkouts(data.workouts);
+          setSummary(data.summary || { count: 0, totalMinutes: 0, totalCalories: 0 });
+        }
+      } catch (error) {
+        console.error("Failed to fetch workouts:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchWorkouts();
+  }, []);
+
+  const formatWorkoutDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+
+    if (diffHours < 24) {
+      return `Today, ${date.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+      })}`;
+    } else if (diffHours < 48) {
+      return "Yesterday";
+    } else {
+      return formatDistanceToNow(date, { addSuffix: true });
+    }
+  };
+
+  const getWorkoutIcon = (type: string) => {
+    return WORKOUT_ICONS[type] || <Dumbbell className="h-5 w-5 text-primary" />;
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -64,15 +124,17 @@ export default function WorkoutsPage() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-medium">Weekly Workouts</h3>
               <span className="text-2xl font-bold">
-                {weeklyGoal.current}/{weeklyGoal.target}
+                {summary.count}/{WEEKLY_GOALS.workouts}
               </span>
             </div>
             <Progress
-              value={(weeklyGoal.current / weeklyGoal.target) * 100}
+              value={Math.min((summary.count / WEEKLY_GOALS.workouts) * 100, 100)}
               className="h-3"
             />
             <p className="text-sm text-muted-foreground mt-2">
-              {weeklyGoal.target - weeklyGoal.current} more to reach your goal
+              {summary.count >= WEEKLY_GOALS.workouts
+                ? "Goal reached! Great job!"
+                : `${WEEKLY_GOALS.workouts - summary.count} more to reach your goal`}
             </p>
           </CardContent>
         </Card>
@@ -82,15 +144,17 @@ export default function WorkoutsPage() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-medium">Active Minutes</h3>
               <span className="text-2xl font-bold">
-                {weeklyGoal.minutes}/{weeklyGoal.targetMinutes}
+                {summary.totalMinutes}/{WEEKLY_GOALS.minutes}
               </span>
             </div>
             <Progress
-              value={(weeklyGoal.minutes / weeklyGoal.targetMinutes) * 100}
+              value={Math.min((summary.totalMinutes / WEEKLY_GOALS.minutes) * 100, 100)}
               className="h-3"
             />
             <p className="text-sm text-muted-foreground mt-2">
-              {weeklyGoal.targetMinutes - weeklyGoal.minutes} min remaining this week
+              {summary.totalMinutes >= WEEKLY_GOALS.minutes
+                ? "Weekly target achieved!"
+                : `${WEEKLY_GOALS.minutes - summary.totalMinutes} min remaining this week`}
             </p>
           </CardContent>
         </Card>
@@ -102,36 +166,57 @@ export default function WorkoutsPage() {
           <CardTitle>Recent Workouts</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {mockWorkouts.map((workout) => (
-            <div
-              key={workout.id}
-              className="flex items-center justify-between p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-primary/10">
-                  <Dumbbell className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-medium">{workout.name}</h3>
-                  <p className="text-sm text-muted-foreground">{workout.date}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-6 text-sm">
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Clock className="h-4 w-4" />
-                  <span>{workout.duration} min</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Flame className="h-4 w-4" />
-                  <span>{workout.calories} kcal</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Heart className="h-4 w-4" />
-                  <span>{workout.heartRateAvg} bpm</span>
-                </div>
-              </div>
+          {loading ? (
+            <div className="flex items-center justify-center py-8 text-muted-foreground">
+              Loading workouts...
             </div>
-          ))}
+          ) : workouts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+              <Dumbbell className="h-12 w-12 mb-4 opacity-50" />
+              <p>No workouts logged yet</p>
+              <Button variant="outline" className="mt-4">
+                <Plus className="h-4 w-4 mr-2" />
+                Log your first workout
+              </Button>
+            </div>
+          ) : (
+            workouts.map((workout) => (
+              <div
+                key={workout.id}
+                className="flex items-center justify-between p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="p-3 rounded-xl bg-primary/10">
+                    {getWorkoutIcon(workout.type)}
+                  </div>
+                  <div>
+                    <h3 className="font-medium">{workout.name}</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {formatWorkoutDate(workout.startedAt)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-6 text-sm">
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <Clock className="h-4 w-4" />
+                    <span>{workout.durationMinutes} min</span>
+                  </div>
+                  {workout.caloriesBurned && (
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <Flame className="h-4 w-4" />
+                      <span>{workout.caloriesBurned} kcal</span>
+                    </div>
+                  )}
+                  {workout.heartRateAvg && (
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <Heart className="h-4 w-4" />
+                      <span>{workout.heartRateAvg} bpm</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
 
@@ -140,12 +225,23 @@ export default function WorkoutsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
-            Training Load
+            This Week Summary
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[200px] flex items-center justify-center text-muted-foreground">
-            <p>Training load chart will appear here</p>
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="p-4 rounded-lg bg-muted/50">
+              <div className="text-3xl font-bold text-primary">{summary.count}</div>
+              <div className="text-sm text-muted-foreground">Workouts</div>
+            </div>
+            <div className="p-4 rounded-lg bg-muted/50">
+              <div className="text-3xl font-bold text-green-500">{summary.totalMinutes}</div>
+              <div className="text-sm text-muted-foreground">Minutes</div>
+            </div>
+            <div className="p-4 rounded-lg bg-muted/50">
+              <div className="text-3xl font-bold text-orange-500">{summary.totalCalories}</div>
+              <div className="text-sm text-muted-foreground">Calories</div>
+            </div>
           </div>
         </CardContent>
       </Card>
