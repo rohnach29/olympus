@@ -1,19 +1,47 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { User, Target, Bell, Moon, Shield, Database } from "lucide-react";
+import { User, Target, Bell, Shield, Database, Loader2, Check } from "lucide-react";
+import { AppleHealthIntegration } from "@/components/integrations/apple-health-integration";
+
+interface UserSettings {
+  units?: string;
+  sleepTargetHours?: number;
+  calorieTarget?: number;
+  proteinTargetG?: number;
+  stepsTarget?: number;
+  notificationsEnabled?: boolean;
+}
+
+interface UserProfile {
+  id: string;
+  email: string;
+  fullName: string | null;
+  dateOfBirth: string | null;
+  gender: string | null;
+  heightCm: string | null;
+  weightKg: string | null;
+  settings: UserSettings | null;
+}
 
 export default function SettingsPage() {
+  const [loading, setLoading] = useState(true);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingGoals, setSavingGoals] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
+  const [goalsSaved, setGoalsSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const [profile, setProfile] = useState({
-    fullName: "John Doe",
-    email: "john@example.com",
-    dateOfBirth: "1990-01-15",
-    height: "180",
-    weight: "75",
+    fullName: "",
+    email: "",
+    dateOfBirth: "",
+    height: "",
+    weight: "",
   });
 
   const [goals, setGoals] = useState({
@@ -22,6 +50,120 @@ export default function SettingsPage() {
     proteinTarget: "150",
     stepsTarget: "10000",
   });
+
+  // Fetch user data on mount
+  useEffect(() => {
+    async function fetchUser() {
+      try {
+        const response = await fetch("/api/user");
+        if (!response.ok) {
+          throw new Error("Failed to fetch user data");
+        }
+        const data = await response.json();
+        const user: UserProfile = data.user;
+
+        setProfile({
+          fullName: user.fullName || "",
+          email: user.email || "",
+          dateOfBirth: user.dateOfBirth || "",
+          height: user.heightCm || "",
+          weight: user.weightKg || "",
+        });
+
+        if (user.settings) {
+          setGoals({
+            sleepTarget: String(user.settings.sleepTargetHours || 8),
+            calorieTarget: String(user.settings.calorieTarget || 2000),
+            proteinTarget: String(user.settings.proteinTargetG || 150),
+            stepsTarget: String(user.settings.stepsTarget || 10000),
+          });
+        }
+      } catch (err) {
+        console.error("Error fetching user:", err);
+        setError("Failed to load your profile. Please refresh the page.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchUser();
+  }, []);
+
+  // Save profile handler
+  async function handleSaveProfile() {
+    setSavingProfile(true);
+    setProfileSaved(false);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/user", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: profile.fullName || null,
+          dateOfBirth: profile.dateOfBirth || null,
+          heightCm: profile.height ? parseFloat(profile.height) : null,
+          weightKg: profile.weight ? parseFloat(profile.weight) : null,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to save profile");
+      }
+
+      setProfileSaved(true);
+      setTimeout(() => setProfileSaved(false), 3000);
+    } catch (err) {
+      console.error("Error saving profile:", err);
+      setError(err instanceof Error ? err.message : "Failed to save profile");
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  // Save goals handler
+  async function handleSaveGoals() {
+    setSavingGoals(true);
+    setGoalsSaved(false);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/user", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settings: {
+            sleepTargetHours: parseFloat(goals.sleepTarget) || 8,
+            calorieTarget: parseInt(goals.calorieTarget) || 2000,
+            proteinTargetG: parseInt(goals.proteinTarget) || 150,
+            stepsTarget: parseInt(goals.stepsTarget) || 10000,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to save goals");
+      }
+
+      setGoalsSaved(true);
+      setTimeout(() => setGoalsSaved(false), 3000);
+    } catch (err) {
+      console.error("Error saving goals:", err);
+      setError(err instanceof Error ? err.message : "Failed to save goals");
+    } finally {
+      setSavingGoals(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -32,6 +174,13 @@ export default function SettingsPage() {
           Manage your account and preferences
         </p>
       </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="p-4 rounded-lg bg-destructive/10 text-destructive text-sm">
+          {error}
+        </div>
+      )}
 
       {/* Profile */}
       <Card>
@@ -60,9 +209,8 @@ export default function SettingsPage() {
                 id="email"
                 type="email"
                 value={profile.email}
-                onChange={(e) =>
-                  setProfile({ ...profile, email: e.target.value })
-                }
+                disabled
+                className="bg-muted"
               />
             </div>
             <div className="space-y-2">
@@ -101,7 +249,21 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
-          <Button>Save Profile</Button>
+          <Button onClick={handleSaveProfile} disabled={savingProfile}>
+            {savingProfile ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : profileSaved ? (
+              <>
+                <Check className="h-4 w-4 mr-2" />
+                Saved!
+              </>
+            ) : (
+              "Save Profile"
+            )}
+          </Button>
         </CardContent>
       </Card>
 
@@ -161,7 +323,21 @@ export default function SettingsPage() {
               />
             </div>
           </div>
-          <Button>Save Goals</Button>
+          <Button onClick={handleSaveGoals} disabled={savingGoals}>
+            {savingGoals ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : goalsSaved ? (
+              <>
+                <Check className="h-4 w-4 mr-2" />
+                Saved!
+              </>
+            ) : (
+              "Save Goals"
+            )}
+          </Button>
         </CardContent>
       </Card>
 
@@ -175,20 +351,10 @@ export default function SettingsPage() {
           <CardDescription>Manage your device integrations</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Database className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="font-medium">Apple Health</p>
-                <p className="text-sm text-muted-foreground">
-                  Sync health data from your Apple devices
-                </p>
-              </div>
-            </div>
-            <Button variant="outline">Connect</Button>
-          </div>
+          {/* Apple Health Integration */}
+          <AppleHealthIntegration />
+
+          {/* Google Fit - Coming Soon */}
           <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-green-100">
@@ -201,7 +367,9 @@ export default function SettingsPage() {
                 </p>
               </div>
             </div>
-            <Button variant="outline">Connect</Button>
+            <Button variant="outline" disabled>
+              Coming Soon
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -224,7 +392,7 @@ export default function SettingsPage() {
                   Receive a daily health summary
                 </p>
               </div>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" disabled>
                 Enabled
               </Button>
             </div>
@@ -235,7 +403,7 @@ export default function SettingsPage() {
                   Reminders to log meals and workouts
                 </p>
               </div>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" disabled>
                 Enabled
               </Button>
             </div>
@@ -246,7 +414,7 @@ export default function SettingsPage() {
                   Get notified about important health insights
                 </p>
               </div>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" disabled>
                 Enabled
               </Button>
             </div>
@@ -270,7 +438,9 @@ export default function SettingsPage() {
                 Download all your health data
               </p>
             </div>
-            <Button variant="outline">Export</Button>
+            <Button variant="outline" disabled>
+              Export
+            </Button>
           </div>
           <div className="flex items-center justify-between">
             <div>
@@ -279,7 +449,9 @@ export default function SettingsPage() {
                 Permanently delete your account and data
               </p>
             </div>
-            <Button variant="destructive">Delete</Button>
+            <Button variant="destructive" disabled>
+              Delete
+            </Button>
           </div>
         </CardContent>
       </Card>

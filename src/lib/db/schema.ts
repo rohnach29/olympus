@@ -357,6 +357,36 @@ export const chatMessages = pgTable("chat_messages", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// API tokens for external integrations (Health Auto Export, etc.)
+export const apiTokens = pgTable("api_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(), // 64-char hex from crypto.randomBytes(32)
+  name: text("name").notNull(), // Human-readable name like "iPhone 15 Pro"
+  lastUsedAt: timestamp("last_used_at"),
+  requestCount: integer("request_count").default(0),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Webhook logs for tracking incoming data syncs
+export const webhookLogs = pgTable("webhook_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  tokenId: uuid("token_id").references(() => apiTokens.id, { onDelete: "set null" }),
+  idempotencyKey: text("idempotency_key").notNull(), // Hash to prevent duplicate imports
+  status: text("status").notNull(), // 'success', 'partial', 'failed', 'duplicate'
+  metricsProcessed: integer("metrics_processed").default(0),
+  sleepSessionsProcessed: integer("sleep_sessions_processed").default(0),
+  workoutsProcessed: integer("workouts_processed").default(0),
+  errors: jsonb("errors").default([]),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -378,3 +408,7 @@ export type DailyScore = typeof dailyScores.$inferSelect;
 export type NewDailyScore = typeof dailyScores.$inferInsert;
 export type BloodWorkResult = typeof bloodWork.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
+export type ApiToken = typeof apiTokens.$inferSelect;
+export type NewApiToken = typeof apiTokens.$inferInsert;
+export type WebhookLog = typeof webhookLogs.$inferSelect;
+export type NewWebhookLog = typeof webhookLogs.$inferInsert;

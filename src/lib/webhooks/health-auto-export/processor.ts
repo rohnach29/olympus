@@ -1,0 +1,260 @@
+import { db, healthMetrics, sleepSessions, workouts, webhookLogs, apiTokens } from "@/lib/db";
+import { eq, and, sql } from "drizzle-orm";
+import { generateIdempotencyKey } from "@/lib/utils/token";
+import {
+  HAEPayload,
+  ProcessingResult,
+} from "./types";
+import {
+  mapMetricToOlympus,
+  mapSleepToOlympus,
+  mapWorkoutToOlympus,
+  extractSleepFromMetrics,
+  extractTimestamps,
+} from "./mappers";
+import { calculateSleepScore, calculatePersonalBaseline } from "@/lib/utils/sleep-scoring";
+
+/**
+ * Process Health Auto Export webhook payload
+ */
+export async function processHealthAutoExport(
+  userId: string,
+  tokenId: string,
+  payload: HAEPayload
+): Promise<ProcessingResult> {
+  const result: ProcessingResult = {
+    metricsProcessed: 0,
+    sleepSessionsProcessed: 0,
+    workoutsProcessed: 0,
+    errors: [],
+    status: "success",
+  };
+
+  const metricsArray = payload.data.metrics || [];
+  const workoutsArray = payload.data.workouts || [];
+
+  // Generate idempotency key
+  const timestamps = extractTimestamps(metricsArray, workoutsArray);
+  const idempotencyKey = generateIdempotencyKey(userId, timestamps);
+
+  // Check for duplicate request
+  const [existingLog] = await db
+    .select()
+    .from(webhookLogs)
+    .where(
+      and(
+        eq(webhookLogs.userId, userId),
+        eq(webhookLogs.idempotencyKey, idempotencyKey)
+      )
+    )
+    .limit(1);
+
+  if (existingLog) {
+    result.status = "success"; // Treat duplicates as successful (idempotent)
+    result.errors.push("Duplicate request - already processed");
+
+    // Log as duplicate
+    await db.insert(webhookLogs).values({
+      userId,
+      tokenId,
+      idempotencyKey: `${idempotencyKey}-dup-${Date.now()}`,
+      status: "duplicate",
+      errors: ["Duplicate of previous request"],
+    });
+
+    return result;
+  }
+
+  try {
+    // 1. Process health metrics
+    for (const metric of metricsArray) {
+      // Skip sleep_analysis as we handle it separately
+      if (metric.name === "sleep_analysis" || metric.name === "sleepAnalysis") {
+        continue;
+      }
+
+      const mappedMetrics = mapMetricToOlympus(userId, metric);
+
+      for (const mapped of mappedMetrics) {
+        try {
+          // Check for duplicate (same user, type, timestamp)
+          const existing = await db
+            .select({ id: healthMetrics.id })
+            .from(healthMetrics)
+            .where(
+              and(
+                eq(healthMetrics.userId, userId),
+                eq(healthMetrics.metricType, mapped.metricType),
+                eq(healthMetrics.recordedAt, mapped.recordedAt),
+                eq(healthMetrics.source, "apple_health")
+              )
+            )
+            .limit(1);
+
+          if (existing.length === 0) {
+            await db.insert(healthMetrics).values(mapped);
+            result.metricsProcessed++;
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Unknown error";
+          result.errors.push(`Metric ${metric.name}: ${message}`);
+        }
+      }
+    }
+
+    // 2. Process sleep data
+    const sleepDataArray = extractSleepFromMetrics(metricsArray);
+    for (const sleepData of sleepDataArray) {
+      try {
+        const mapped = mapSleepToOlympus(userId, sleepData);
+
+        if (!mapped) {
+          continue; // Skip invalid sleep data
+        }
+
+        // Check for duplicate (same user, sleep date, source)
+        const existing = await db
+          .select({ id: sleepSessions.id })
+          .from(sleepSessions)
+          .where(
+            and(
+              eq(sleepSessions.userId, userId),
+              eq(sleepSessions.sleepDate, mapped.sleepDate),
+              eq(sleepSessions.source, "apple_health")
+            )
+          )
+          .limit(1);
+
+        if (existing.length === 0) {
+          // Calculate sleep score using existing scoring algorithm
+          let sleepScore: number | null = null;
+
+          try {
+            // Get user's sleep history for baseline
+            const historyRaw = await db
+              .select()
+              .from(sleepSessions)
+              .where(eq(sleepSessions.userId, userId))
+              .orderBy(sql`${sleepSessions.sleepDate} DESC`)
+              .limit(14);
+
+            // Map to non-nullable values for baseline calculation
+            const history = historyRaw.map((s) => ({
+              totalMinutes: s.totalMinutes,
+              inBedMinutes: s.inBedMinutes,
+              deepSleepMinutes: s.deepSleepMinutes ?? 0,
+              remSleepMinutes: s.remSleepMinutes ?? 0,
+              lightSleepMinutes: s.lightSleepMinutes ?? 0,
+              awakeMinutes: s.awakeMinutes ?? 0,
+              sleepLatencyMinutes: s.sleepLatencyMinutes ?? 0,
+              hrvAvg: s.hrvAvg,
+            }));
+
+            const baseline = calculatePersonalBaseline(history);
+
+            const scoreResult = calculateSleepScore(
+              {
+                totalMinutes: mapped.totalMinutes,
+                inBedMinutes: mapped.inBedMinutes,
+                deepSleepMinutes: mapped.deepSleepMinutes ?? 0,
+                remSleepMinutes: mapped.remSleepMinutes ?? 0,
+                lightSleepMinutes: mapped.lightSleepMinutes ?? 0,
+                sleepLatencyMinutes: mapped.sleepLatencyMinutes ?? 0,
+                awakeMinutes: mapped.awakeMinutes ?? 0,
+                hrvAvg: null, // Not available from sleep data
+              },
+              baseline
+            );
+
+            sleepScore = scoreResult.totalScore;
+          } catch (scoreErr) {
+            // Score calculation failed, continue without score
+            console.error("Sleep score calculation failed:", scoreErr);
+          }
+
+          await db.insert(sleepSessions).values({
+            ...mapped,
+            sleepScore,
+          });
+          result.sleepSessionsProcessed++;
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        result.errors.push(`Sleep data: ${message}`);
+      }
+    }
+
+    // 3. Process workouts
+    for (const workout of workoutsArray) {
+      try {
+        const mapped = mapWorkoutToOlympus(userId, workout);
+
+        // Check for duplicate (same user, start time, type)
+        const existing = await db
+          .select({ id: workouts.id })
+          .from(workouts)
+          .where(
+            and(
+              eq(workouts.userId, userId),
+              eq(workouts.startedAt, mapped.startedAt),
+              eq(workouts.type, mapped.type)
+            )
+          )
+          .limit(1);
+
+        if (existing.length === 0) {
+          await db.insert(workouts).values(mapped);
+          result.workoutsProcessed++;
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        result.errors.push(`Workout ${workout.name}: ${message}`);
+      }
+    }
+
+    // Determine final status
+    if (result.errors.length > 0) {
+      result.status = (result.metricsProcessed + result.sleepSessionsProcessed + result.workoutsProcessed) > 0
+        ? "partial"
+        : "failed";
+    }
+
+    // 4. Log the webhook request
+    await db.insert(webhookLogs).values({
+      userId,
+      tokenId,
+      idempotencyKey,
+      status: result.status,
+      metricsProcessed: result.metricsProcessed,
+      sleepSessionsProcessed: result.sleepSessionsProcessed,
+      workoutsProcessed: result.workoutsProcessed,
+      errors: result.errors.length > 0 ? result.errors : [],
+    });
+
+    // 5. Update token stats
+    await db
+      .update(apiTokens)
+      .set({
+        lastUsedAt: new Date(),
+        requestCount: sql`${apiTokens.requestCount} + 1`,
+      })
+      .where(eq(apiTokens.id, tokenId));
+
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    result.status = "failed";
+    result.errors.push(`Processing failed: ${message}`);
+
+    // Log the failure
+    await db.insert(webhookLogs).values({
+      userId,
+      tokenId,
+      idempotencyKey,
+      status: "failed",
+      errors: result.errors,
+    });
+
+    return result;
+  }
+}

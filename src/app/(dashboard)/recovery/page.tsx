@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { ScoreRing } from "@/components/dashboard/score-ring";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import {
@@ -11,6 +12,8 @@ import {
   TrendingUp,
   TrendingDown,
   Battery,
+  Info,
+  X,
 } from "lucide-react";
 
 interface RecoveryData {
@@ -23,6 +26,7 @@ interface RecoveryData {
   } | null;
   status: string;
   recommendation: string;
+  trainingRecommendation?: string;
   trend: {
     date: string;
     recoveryScore: number;
@@ -30,8 +34,8 @@ interface RecoveryData {
     strainScore: number;
   }[];
   metrics: {
-    hrv: { value: number; trend: number; unit: string };
-    restingHr: { value: number; trend: number; unit: string };
+    hrv: { value: number; trend: number; unit: string; baseline?: number | null };
+    restingHr: { value: number; trend: number; unit: string; baseline?: number | null };
     respiratoryRate: { value: number; trend: number; unit: string };
     steps: { value: number; unit: string };
     activeCalories: { value: number; unit: string };
@@ -39,8 +43,21 @@ interface RecoveryData {
   factors: {
     name: string;
     score: number;
+    weight?: string;
     impact: string;
+    zScore?: number | null;
   }[];
+  baseline?: {
+    hrvAvg: number;
+    restingHrAvg: number;
+    dataPoints: number;
+  } | null;
+  strain?: {
+    yesterdayStrain: number;
+    category: string;
+    trimp: number;
+    description: string;
+  };
 }
 
 const getTrainingTags = (score: number) => {
@@ -73,6 +90,7 @@ const getTrainingTags = (score: number) => {
 export default function RecoveryPage() {
   const [data, setData] = useState<RecoveryData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showInfoModal, setShowInfoModal] = useState(false);
 
   useEffect(() => {
     const fetchRecovery = async () => {
@@ -123,6 +141,9 @@ export default function RecoveryPage() {
   const recoveryScore = data.today.recoveryScore;
   const trainingTags = getTrainingTags(recoveryScore);
 
+  // Prepare trend data - ensure we have 7 days
+  const trendData = data.trend.slice(0, 7);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -144,12 +165,29 @@ export default function RecoveryPage() {
                 {data.recommendation}
               </p>
             </div>
+            {/* Info Button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-3 text-muted-foreground hover:text-foreground"
+              onClick={() => setShowInfoModal(true)}
+            >
+              <Info className="h-4 w-4 mr-1" />
+              How is this calculated?
+            </Button>
           </CardContent>
         </Card>
 
         <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle>Recovery Factors</CardTitle>
+            <CardTitle className="flex items-center justify-between">
+              Recovery Factors
+              {data.baseline && (
+                <span className="text-xs font-normal text-muted-foreground">
+                  Based on {data.baseline.dataPoints} days of data
+                </span>
+              )}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -157,9 +195,21 @@ export default function RecoveryPage() {
                 <div key={factor.name} className="flex items-center gap-4">
                   <div className="flex-1">
                     <div className="flex justify-between mb-1">
-                      <span className="text-sm font-medium">{factor.name}</span>
+                      <span className="text-sm font-medium">
+                        {factor.name}
+                        {factor.weight && (
+                          <span className="text-xs text-muted-foreground ml-2">
+                            ({factor.weight})
+                          </span>
+                        )}
+                      </span>
                       <span className="text-sm text-muted-foreground">
                         {factor.score}%
+                        {factor.zScore !== undefined && factor.zScore !== null && (
+                          <span className="text-xs ml-1">
+                            (z: {factor.zScore > 0 ? "+" : ""}{factor.zScore})
+                          </span>
+                        )}
                       </span>
                     </div>
                     <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -185,6 +235,27 @@ export default function RecoveryPage() {
                 </div>
               ))}
             </div>
+
+            {/* Yesterday's Strain */}
+            {data.strain && (
+              <div className="mt-6 p-4 bg-muted/50 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Yesterday&apos;s Strain</p>
+                    <p className="text-xs text-muted-foreground">{data.strain.description}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold">{data.strain.yesterdayStrain}</p>
+                    <p className="text-xs text-muted-foreground">/ 21</p>
+                  </div>
+                </div>
+                {data.strain.trimp > 0 && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    TRIMP: {data.strain.trimp} (Training Impulse)
+                  </p>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -223,39 +294,84 @@ export default function RecoveryPage() {
         />
       </div>
 
+      {/* Baseline Info */}
+      {data.baseline && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Your Personal Baselines (14-day avg)</span>
+              <div className="flex gap-6">
+                <span>
+                  <strong>HRV:</strong> {data.baseline.hrvAvg} ms
+                </span>
+                <span>
+                  <strong>Resting HR:</strong> {data.baseline.restingHrAvg} bpm
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Recovery Trend */}
       <Card>
         <CardHeader>
           <CardTitle>7-Day Recovery Trend</CardTitle>
         </CardHeader>
         <CardContent>
-          {data.trend.length > 0 ? (
-            <div className="flex justify-between items-end h-[150px] gap-2">
-              {data.trend
-                .slice()
-                .reverse()
-                .map((day, i) => (
-                  <div
-                    key={i}
-                    className="flex-1 flex flex-col items-center gap-2"
-                  >
-                    <div
-                      className={`w-full rounded-t-lg transition-all ${
-                        day.recoveryScore >= 80
-                          ? "bg-green-500"
-                          : day.recoveryScore >= 60
-                          ? "bg-yellow-500"
-                          : "bg-red-500"
-                      }`}
-                      style={{ height: `${day.recoveryScore}%` }}
-                    />
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(day.date).toLocaleDateString("en-US", {
-                        weekday: "short",
-                      })}
-                    </span>
-                  </div>
-                ))}
+          {trendData.length > 0 ? (
+            <div className="space-y-4">
+              {/* Bar Chart */}
+              <div className="flex justify-between items-end h-[150px] gap-2">
+                {trendData
+                  .slice()
+                  .reverse()
+                  .map((day, i) => {
+                    const score = day.recoveryScore || 0;
+                    return (
+                      <div
+                        key={`${day.date}-${i}`}
+                        className="flex-1 flex flex-col items-center gap-2"
+                      >
+                        <div className="text-xs font-medium">{score}</div>
+                        <div className="w-full bg-muted rounded-lg relative" style={{ height: "120px" }}>
+                          <div
+                            className={`absolute bottom-0 w-full rounded-lg transition-all ${
+                              score >= 80
+                                ? "bg-green-500"
+                                : score >= 60
+                                ? "bg-yellow-500"
+                                : score > 0
+                                ? "bg-red-500"
+                                : "bg-muted-foreground/20"
+                            }`}
+                            style={{ height: `${Math.max(score, 5)}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(day.date).toLocaleDateString("en-US", {
+                            weekday: "short",
+                          })}
+                        </span>
+                      </div>
+                    );
+                  })}
+              </div>
+              {/* Legend */}
+              <div className="flex justify-center gap-4 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded bg-green-500" />
+                  <span>Optimal (80+)</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded bg-yellow-500" />
+                  <span>Moderate (60-79)</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded bg-red-500" />
+                  <span>Low (&lt;60)</span>
+                </div>
+              </div>
             </div>
           ) : (
             <div className="h-[150px] flex items-center justify-center text-muted-foreground">
@@ -280,6 +396,11 @@ export default function RecoveryPage() {
                 Based on your recovery score of {recoveryScore}%,{" "}
                 {data.recommendation.toLowerCase()}
               </p>
+              {data.trainingRecommendation && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  <strong>Suggested:</strong> {data.trainingRecommendation}
+                </p>
+              )}
               <div className="mt-4 flex flex-wrap gap-2">
                 {trainingTags.map((tag) => (
                   <span
@@ -294,6 +415,140 @@ export default function RecoveryPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Info Modal */}
+      {showInfoModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-background rounded-lg shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h2 className="text-lg font-semibold">How Recovery Score is Calculated</h2>
+              <Button variant="ghost" size="sm" onClick={() => setShowInfoModal(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Overview */}
+              <div>
+                <h3 className="font-medium mb-2">Overview</h3>
+                <p className="text-sm text-muted-foreground">
+                  Your recovery score is calculated using a weighted multi-factor model based on
+                  sports science research. Each factor compares your current values to your personal
+                  baseline (14-day rolling average).
+                </p>
+              </div>
+
+              {/* Components Table */}
+              <div>
+                <h3 className="font-medium mb-3">Score Components</h3>
+                <div className="space-y-3">
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-medium">Sleep Quality</span>
+                      <span className="text-sm text-muted-foreground">35%</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Your PSQI-based sleep score. Includes duration, efficiency, deep/REM sleep, and latency.
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-medium">HRV vs Baseline</span>
+                      <span className="text-sm text-muted-foreground">25%</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Compares today&apos;s HRV to your 14-day average using z-score. Higher HRV = better
+                      parasympathetic tone = more recovered.
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-medium">Resting HR vs Baseline</span>
+                      <span className="text-sm text-muted-foreground">15%</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Compares to your baseline (inverted - lower is better). Elevated resting HR
+                      often indicates incomplete recovery.
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-medium">Previous Strain</span>
+                      <span className="text-sm text-muted-foreground">15%</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Yesterday&apos;s training load (TRIMP). Higher strain yesterday = more recovery
+                      needed today.
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-medium">Sleep Consistency</span>
+                      <span className="text-sm text-muted-foreground">10%</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      How close your bedtime was to your average. Consistent sleep times support
+                      circadian rhythm health.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Strain Calculation */}
+              <div>
+                <h3 className="font-medium mb-2">Strain Calculation (TRIMP)</h3>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Strain uses Banister&apos;s Training Impulse (TRIMP) formula from exercise physiology:
+                </p>
+                <div className="p-3 bg-muted rounded-lg font-mono text-xs">
+                  <p>HR_reserve = (HR_avg - HR_rest) / (HR_max - HR_rest)</p>
+                  <p>TRIMP = Duration × HR_reserve × 0.64 × e^(1.92 × HR_reserve)</p>
+                  <p>Strain = 3.5 × ln(TRIMP + 1)  // 0-21 scale</p>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Higher heart rates are weighted exponentially more, reflecting the greater
+                  physiological stress of intense exercise.
+                </p>
+              </div>
+
+              {/* Z-Score Explanation */}
+              <div>
+                <h3 className="font-medium mb-2">Personal Baseline Comparison</h3>
+                <p className="text-sm text-muted-foreground">
+                  Most components use z-score comparison to your personal baseline:
+                </p>
+                <ul className="text-sm text-muted-foreground mt-2 space-y-1 list-disc list-inside">
+                  <li><strong>z = 0</strong> (at your baseline) → 75 points</li>
+                  <li><strong>z = +1</strong> (1 std dev better than usual) → ~90 points</li>
+                  <li><strong>z = -1</strong> (1 std dev worse than usual) → ~55 points</li>
+                </ul>
+                <p className="text-xs text-muted-foreground mt-2">
+                  This personalization means the system adapts to YOUR normal, not population averages.
+                </p>
+              </div>
+
+              {/* References */}
+              <div className="text-xs text-muted-foreground border-t pt-4">
+                <p className="font-medium mb-1">Research References:</p>
+                <ul className="space-y-1">
+                  <li>• Banister EW (1991) - Training Impulse model</li>
+                  <li>• Plews et al. (2013) - HRV and training adaptation</li>
+                  <li>• Buchheit (2014) - HR measures for monitoring training</li>
+                  <li>• PSQI (1989) - Pittsburgh Sleep Quality Index</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="flex justify-end p-4 border-t">
+              <Button onClick={() => setShowInfoModal(false)}>Got it</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
