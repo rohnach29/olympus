@@ -13,17 +13,17 @@ import {
   Dumbbell,
 } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
-import { db, dailyScores, healthMetrics } from "@/lib/db";
-import { eq, desc } from "drizzle-orm";
+import { db, healthMetrics, sleepSessions, workouts } from "@/lib/db";
+import { eq, desc, gte, and } from "drizzle-orm";
 
 // Default values when no data available
 const defaultMetrics = {
-  heartRate: 62,
-  hrv: 48,
-  steps: 8432,
-  calories: 1850,
-  sleepHours: 7.4,
-  activeMinutes: 45,
+  heartRate: null as number | null,
+  hrv: null as number | null,
+  steps: null as number | null,
+  calories: null as number | null,
+  sleepHours: null as number | null,
+  activeMinutes: null as number | null,
 };
 
 const defaultRecommendations = [
@@ -47,55 +47,89 @@ const defaultRecommendations = [
 export default async function DashboardPage() {
   const user = await getCurrentUser();
 
-  // Fetch today's scores from database
-  let scores = { readiness: 82, sleep: 78, strain: 45, recovery: 85 };
-  let metrics = defaultMetrics;
+  // Initialize with nulls (will show "--" if no data)
+  let scores = { readiness: null as number | null, sleep: null as number | null, strain: null as number | null, recovery: null as number | null };
+  let metrics = { ...defaultMetrics };
+  let sleepDuration = "";
 
   if (user) {
     try {
-      const todayScores = await db
-        .select()
-        .from(dailyScores)
-        .where(eq(dailyScores.userId, user.id))
-        .orderBy(desc(dailyScores.date))
-        .limit(1);
+      // Get today's date range
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-      if (todayScores.length > 0) {
-        scores = {
-          readiness: Number(todayScores[0].readinessScore) || 82,
-          sleep: Number(todayScores[0].sleepScore) || 78,
-          strain: Number(todayScores[0].strainScore) || 45,
-          recovery: Number(todayScores[0].recoveryScore) || 85,
-        };
-      }
-
-      // Fetch recent metrics
+      // Fetch recent health metrics from Apple Watch
       const recentMetrics = await db
         .select()
         .from(healthMetrics)
         .where(eq(healthMetrics.userId, user.id))
         .orderBy(desc(healthMetrics.recordedAt))
-        .limit(20);
+        .limit(50);
 
       if (recentMetrics.length > 0) {
         const metricMap: Record<string, number> = {};
         recentMetrics.forEach((m) => {
+          // Only take the most recent value for each type
           if (!metricMap[m.metricType]) {
             metricMap[m.metricType] = Number(m.value);
           }
         });
 
+        // Map from our stored metric names to display
         metrics = {
-          heartRate: metricMap["resting_hr"] || defaultMetrics.heartRate,
-          hrv: metricMap["hrv"] || defaultMetrics.hrv,
-          steps: metricMap["steps"] || defaultMetrics.steps,
-          calories: metricMap["calories"] || defaultMetrics.calories,
-          sleepHours: metricMap["sleep_hours"] || defaultMetrics.sleepHours,
-          activeMinutes: metricMap["active_minutes"] || defaultMetrics.activeMinutes,
+          heartRate: metricMap["resting_heart_rate"] ?? null,
+          hrv: metricMap["hrv"] ?? null,
+          steps: metricMap["steps"] ?? null,
+          calories: metricMap["calories_active"] ?? null,
+          sleepHours: null, // Will get from sleepSessions
+          activeMinutes: metricMap["exercise_minutes"] ?? null,
         };
       }
+
+      // Fetch most recent sleep session
+      const recentSleep = await db
+        .select()
+        .from(sleepSessions)
+        .where(eq(sleepSessions.userId, user.id))
+        .orderBy(desc(sleepSessions.sleepDate))
+        .limit(1);
+
+      if (recentSleep.length > 0) {
+        const sleep = recentSleep[0];
+        const hours = Math.floor(sleep.totalMinutes / 60);
+        const mins = sleep.totalMinutes % 60;
+        sleepDuration = `${hours}h ${mins}m`;
+        metrics.sleepHours = Math.round((sleep.totalMinutes / 60) * 10) / 10;
+        scores.sleep = sleep.sleepScore;
+      }
+
+      // Fetch today's workouts for strain estimate
+      const todayWorkouts = await db
+        .select()
+        .from(workouts)
+        .where(
+          and(
+            eq(workouts.userId, user.id),
+            gte(workouts.startedAt, today)
+          )
+        );
+
+      // Simple strain estimate based on workout duration
+      if (todayWorkouts.length > 0) {
+        const totalMinutes = todayWorkouts.reduce((sum, w) => sum + w.durationMinutes, 0);
+        // Rough strain: 0-30min = low (5-8), 30-60min = moderate (8-12), 60+ = high (12-18)
+        scores.strain = Math.min(21, Math.round(5 + (totalMinutes / 10)));
+      }
+
+      // Calculate readiness/recovery based on available data
+      if (scores.sleep !== null) {
+        // Simple formula: recovery is heavily influenced by sleep
+        scores.recovery = scores.sleep;
+        scores.readiness = Math.round((scores.sleep + (metrics.hrv ? Math.min(100, metrics.hrv * 1.5) : scores.sleep)) / 2);
+      }
+
     } catch (error) {
-      console.log("Could not fetch dashboard data:", error);
+      console.error("Could not fetch dashboard data:", error);
     }
   }
 
@@ -125,7 +159,7 @@ export default async function DashboardPage() {
               score={scores.sleep}
               size="md"
               label="Sleep Score"
-              sublabel="7h 24m"
+              sublabel={sleepDuration || "No data"}
             />
           </CardContent>
         </Card>
@@ -164,7 +198,6 @@ export default async function DashboardPage() {
             unit="bpm"
             icon={Heart}
             iconColor="text-red-500"
-            change={-3}
           />
           <MetricCard
             title="HRV"
@@ -172,17 +205,16 @@ export default async function DashboardPage() {
             unit="ms"
             icon={Activity}
             iconColor="text-purple-500"
-            change={8}
           />
           <MetricCard
             title="Steps"
-            value={metrics.steps.toLocaleString()}
+            value={metrics.steps ? metrics.steps.toLocaleString() : null}
             icon={Footprints}
             iconColor="text-blue-500"
           />
           <MetricCard
             title="Calories"
-            value={metrics.calories.toLocaleString()}
+            value={metrics.calories ? metrics.calories.toLocaleString() : null}
             unit="kcal"
             icon={Flame}
             iconColor="text-orange-500"

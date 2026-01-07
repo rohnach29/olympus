@@ -4,7 +4,7 @@ import { LucideIcon } from "lucide-react";
 
 interface MetricCardProps {
   title: string;
-  value: string | number;
+  value: string | number | null;
   unit?: string;
   change?: number;
   icon: LucideIcon;
@@ -28,8 +28,8 @@ export function MetricCard({
           <div className="space-y-1">
             <p className="text-sm text-muted-foreground">{title}</p>
             <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-bold">{value}</span>
-              {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
+              <span className="text-2xl font-bold">{value ?? "--"}</span>
+              {unit && value !== null && <span className="text-sm text-muted-foreground">{unit}</span>}
             </div>
             {change !== undefined && (
               <p

@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils";
 
 interface ScoreRingProps {
-  score: number;
+  score: number | null;
   maxScore?: number;
   size?: "sm" | "md" | "lg";
   label?: string;
@@ -28,10 +28,14 @@ export function ScoreRing({
   const config = sizeConfig[size];
   const radius = (config.width - config.strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const percentage = Math.min(score / maxScore, 1);
+
+  // Handle null score
+  const hasScore = score !== null;
+  const percentage = hasScore ? Math.min(score / maxScore, 1) : 0;
   const offset = circumference * (1 - percentage);
 
   const getColor = () => {
+    if (!hasScore) return "stroke-muted/30";
     if (percentage >= 0.8) return "stroke-[hsl(var(--health-green))]";
     if (percentage >= 0.6) return "stroke-[hsl(var(--health-yellow))]";
     if (percentage >= 0.4) return "stroke-[hsl(var(--health-orange))]";
@@ -72,7 +76,9 @@ export function ScoreRing({
         </svg>
         {/* Score text */}
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className={cn("font-bold", config.fontSize)}>{Math.round(score)}</span>
+          <span className={cn("font-bold", config.fontSize)}>
+            {hasScore ? Math.round(score) : "--"}
+          </span>
           {sublabel && (
             <span className="text-xs text-muted-foreground">{sublabel}</span>
           )}
