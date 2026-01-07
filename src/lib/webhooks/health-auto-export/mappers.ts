@@ -39,6 +39,9 @@ export function mapMetricToOlympus(
 
 /**
  * Map Health Auto Export sleep data to Olympus sleepSessions format
+ *
+ * NOTE: Health Auto Export sends sleep durations in HOURS, not minutes!
+ * We need to convert and round to integers for the database.
  */
 export function mapSleepToOlympus(
   userId: string,
@@ -60,13 +63,33 @@ export function mapSleepToOlympus(
   }
   const sleepDateStr = sleepDate.toISOString().split("T")[0];
 
-  // Total time in bed (minutes)
-  const inBedMinutes = sleepData.inBed ||
-    Math.round((wakeTime.getTime() - bedtime.getTime()) / (1000 * 60));
+  // Helper: Convert hours to minutes (HAE sends hours) and round to integer
+  const hoursToMinutes = (hours: number | undefined): number => {
+    if (!hours) return 0;
+    // If value is small (< 24), it's probably hours - convert to minutes
+    // If value is large (>= 24), it's probably already minutes
+    const value = hours < 24 ? hours * 60 : hours;
+    return Math.round(value);
+  };
 
-  // Total sleep (minutes) - sum of stages or use asleep if available
-  const totalMinutes = sleepData.asleep ||
-    (sleepData.deep || 0) + (sleepData.rem || 0) + (sleepData.core || 0);
+  // Calculate time in bed from timestamps (this is always accurate)
+  const inBedMinutesFromTimestamps = Math.round(
+    (wakeTime.getTime() - bedtime.getTime()) / (1000 * 60)
+  );
+
+  // Use timestamp-based calculation as primary, fall back to provided value
+  const inBedMinutes = inBedMinutesFromTimestamps || hoursToMinutes(sleepData.inBed);
+
+  // Convert sleep stage durations from hours to minutes
+  const deepSleepMinutes = hoursToMinutes(sleepData.deep);
+  const remSleepMinutes = hoursToMinutes(sleepData.rem);
+  const lightSleepMinutes = hoursToMinutes(sleepData.core); // "core" = light sleep
+  const awakeMinutesRaw = hoursToMinutes(sleepData.awake);
+
+  // Total sleep = sum of stages, or use provided asleep value
+  const totalMinutes = sleepData.asleep
+    ? hoursToMinutes(sleepData.asleep)
+    : deepSleepMinutes + remSleepMinutes + lightSleepMinutes;
 
   // Calculate efficiency
   const efficiency = inBedMinutes > 0
@@ -74,8 +97,7 @@ export function mapSleepToOlympus(
     : null;
 
   // Calculate awake minutes if not provided
-  const awakeMinutes = sleepData.awake ||
-    Math.max(0, inBedMinutes - totalMinutes);
+  const awakeMinutes = awakeMinutesRaw || Math.max(0, inBedMinutes - totalMinutes);
 
   return {
     userId,
@@ -84,9 +106,9 @@ export function mapSleepToOlympus(
     sleepDate: sleepDateStr,
     totalMinutes,
     inBedMinutes,
-    deepSleepMinutes: sleepData.deep || 0,
-    remSleepMinutes: sleepData.rem || 0,
-    lightSleepMinutes: sleepData.core || 0, // "core" = light sleep
+    deepSleepMinutes,
+    remSleepMinutes,
+    lightSleepMinutes,
     awakeMinutes,
     sleepLatencyMinutes: 0, // Not provided by Health Auto Export
     efficiency,
