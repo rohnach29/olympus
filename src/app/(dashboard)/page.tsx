@@ -89,25 +89,23 @@ export default async function DashboardPage() {
       // Today in user's timezone (as UTC timestamp)
       const today = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0) - userOffsetMs);
 
-      // Fetch point-in-time metrics (most recent value) - HR, HRV
-      const pointInTimeMetrics = await db
-        .select()
-        .from(healthMetrics)
-        .where(
-          and(
-            eq(healthMetrics.userId, user.id),
-            sql`${healthMetrics.metricType} IN ('resting_heart_rate', 'hrv', 'respiratory_rate', 'blood_oxygen')`
-          )
-        )
-        .orderBy(desc(healthMetrics.recordedAt))
-        .limit(20);
+      // Fetch point-in-time metrics (most recent value of EACH type) - HR, HRV
+      // Using DISTINCT ON to get one record per metric type (the most recent one)
+      const pointInTimeMetrics = await db.execute(sql`
+        SELECT DISTINCT ON (metric_type) *
+        FROM health_metrics
+        WHERE user_id = ${user.id}
+          AND metric_type IN ('resting_heart_rate', 'hrv', 'respiratory_rate', 'blood_oxygen')
+        ORDER BY metric_type, recorded_at DESC
+      `) as unknown as Array<{ metric_type: string; value: string }>;
 
       const metricMap: Record<string, number> = {};
       pointInTimeMetrics.forEach((m) => {
-        if (!metricMap[m.metricType]) {
+        const metricType = m.metric_type;
+        if (!metricMap[metricType]) {
           // Round HRV and heart rate to whole numbers
           const value = Number(m.value);
-          metricMap[m.metricType] = ['hrv', 'resting_heart_rate', 'heart_rate'].includes(m.metricType)
+          metricMap[metricType] = ['hrv', 'resting_heart_rate', 'heart_rate'].includes(metricType)
             ? Math.round(value)
             : value;
         }
