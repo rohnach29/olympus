@@ -25,6 +25,7 @@ export const users = pgTable("users", {
   goals: text("goals").array(),
   settings: jsonb("settings").default({
     units: "metric",
+    timezone: "Asia/Kolkata", // IANA timezone identifier
     sleepTargetHours: 8,
     calorieTarget: 2000,
     proteinTargetG: 150,

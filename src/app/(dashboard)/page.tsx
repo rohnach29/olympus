@@ -22,9 +22,16 @@ const defaultMetrics = {
   hrv: null as number | null,
   steps: null as number | null,
   calories: null as number | null,
-  sleepHours: null as number | null,
+  sleepDisplay: null as string | null, // Formatted as "8h 42m"
   activeMinutes: null as number | null,
 };
+
+// Helper to format minutes as "Xh Ym"
+function formatSleepDuration(totalMinutes: number): string {
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = Math.round(totalMinutes % 60);
+  return `${hours}h ${mins}m`;
+}
 
 const defaultRecommendations = [
   {
@@ -54,17 +61,33 @@ export default async function DashboardPage() {
 
   if (user) {
     try {
-      // Get today's date range in IST (UTC+5:30)
-      // TODO: Get timezone from user settings instead of hardcoding
+      // Get today's date range in user's timezone
+      const userSettings = user.settings as { timezone?: string } | null;
+      const userTimezone = userSettings?.timezone || "UTC";
+
+      // Calculate "today" in user's timezone
       const now = new Date();
-      const istOffset = 5.5 * 60 * 60 * 1000; // 5.5 hours in ms
-      const istNow = new Date(now.getTime() + istOffset);
-      const today = new Date(Date.UTC(
-        istNow.getUTCFullYear(),
-        istNow.getUTCMonth(),
-        istNow.getUTCDate(),
-        0, 0, 0, 0
-      ) - istOffset); // Midnight IST in UTC
+      // Use Intl to get the date in user's timezone
+      const formatter = new Intl.DateTimeFormat("en-CA", {
+        timeZone: userTimezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      });
+      const [year, month, day] = formatter.format(now).split("-").map(Number);
+
+      // Create midnight in user's timezone, then convert to UTC
+      // This is a bit tricky - we need to find the UTC time that corresponds to midnight in user's TZ
+      const midnightLocal = new Date(`${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T00:00:00`);
+      const tzOffset = midnightLocal.getTimezoneOffset(); // Server's offset in minutes
+
+      // Get the offset for user's timezone by comparing formatted time
+      const userMidnight = new Date(now.toLocaleString("en-US", { timeZone: userTimezone }));
+      const utcMidnight = new Date(now.toLocaleString("en-US", { timeZone: "UTC" }));
+      const userOffsetMs = userMidnight.getTime() - utcMidnight.getTime();
+
+      // Today in user's timezone (as UTC timestamp)
+      const today = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0) - userOffsetMs);
 
       // Fetch point-in-time metrics (most recent value) - HR, HRV
       const pointInTimeMetrics = await db
@@ -117,7 +140,7 @@ export default async function DashboardPage() {
         hrv: metricMap["hrv"] ?? null,
         steps: cumulativeMap["steps"] ?? null,
         calories: cumulativeMap["calories_active"] ?? null,
-        sleepHours: null, // Will get from sleepSessions
+        sleepDisplay: null, // Will get from sleepSessions
         activeMinutes: cumulativeMap["exercise_minutes"] ?? null,
       };
 
@@ -134,7 +157,7 @@ export default async function DashboardPage() {
         const hours = Math.floor(sleep.totalMinutes / 60);
         const mins = sleep.totalMinutes % 60;
         sleepDuration = `${hours}h ${mins}m`;
-        metrics.sleepHours = Math.round((sleep.totalMinutes / 60) * 10) / 10;
+        metrics.sleepDisplay = formatSleepDuration(sleep.totalMinutes);
         scores.sleep = sleep.sleepScore;
       }
 
@@ -256,8 +279,7 @@ export default async function DashboardPage() {
           />
           <MetricCard
             title="Sleep"
-            value={metrics.sleepHours}
-            unit="hrs"
+            value={metrics.sleepDisplay}
             icon={Moon}
             iconColor="text-indigo-500"
           />

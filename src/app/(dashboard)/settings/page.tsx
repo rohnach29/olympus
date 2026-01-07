@@ -10,12 +10,32 @@ import { AppleHealthIntegration } from "@/components/integrations/apple-health-i
 
 interface UserSettings {
   units?: string;
+  timezone?: string;
   sleepTargetHours?: number;
   calorieTarget?: number;
   proteinTargetG?: number;
   stepsTarget?: number;
   notificationsEnabled?: boolean;
 }
+
+// Common timezones for the dropdown
+const TIMEZONES = [
+  { value: "Pacific/Honolulu", label: "Hawaii (UTC-10)" },
+  { value: "America/Los_Angeles", label: "Pacific Time (UTC-8)" },
+  { value: "America/Denver", label: "Mountain Time (UTC-7)" },
+  { value: "America/Chicago", label: "Central Time (UTC-6)" },
+  { value: "America/New_York", label: "Eastern Time (UTC-5)" },
+  { value: "Europe/London", label: "London (UTC+0)" },
+  { value: "Europe/Paris", label: "Central Europe (UTC+1)" },
+  { value: "Europe/Helsinki", label: "Eastern Europe (UTC+2)" },
+  { value: "Asia/Dubai", label: "Dubai (UTC+4)" },
+  { value: "Asia/Kolkata", label: "India (UTC+5:30)" },
+  { value: "Asia/Bangkok", label: "Bangkok (UTC+7)" },
+  { value: "Asia/Singapore", label: "Singapore (UTC+8)" },
+  { value: "Asia/Tokyo", label: "Tokyo (UTC+9)" },
+  { value: "Australia/Sydney", label: "Sydney (UTC+11)" },
+  { value: "Pacific/Auckland", label: "New Zealand (UTC+13)" },
+];
 
 interface UserProfile {
   id: string;
@@ -42,6 +62,7 @@ export default function SettingsPage() {
     dateOfBirth: "",
     height: "",
     weight: "",
+    timezone: "Asia/Kolkata",
   });
 
   const [goals, setGoals] = useState({
@@ -68,6 +89,7 @@ export default function SettingsPage() {
           dateOfBirth: user.dateOfBirth || "",
           height: user.heightCm || "",
           weight: user.weightKg || "",
+          timezone: user.settings?.timezone || "Asia/Kolkata",
         });
 
         if (user.settings) {
@@ -104,6 +126,9 @@ export default function SettingsPage() {
           dateOfBirth: profile.dateOfBirth || null,
           heightCm: profile.height ? parseFloat(profile.height) : null,
           weightKg: profile.weight ? parseFloat(profile.weight) : null,
+          settings: {
+            timezone: profile.timezone,
+          },
         }),
       });
 
@@ -247,6 +272,26 @@ export default function SettingsPage() {
                   }
                 />
               </div>
+            </div>
+            <div className="space-y-2 col-span-2">
+              <Label htmlFor="timezone">Timezone</Label>
+              <select
+                id="timezone"
+                value={profile.timezone}
+                onChange={(e) =>
+                  setProfile({ ...profile, timezone: e.target.value })
+                }
+                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+              >
+                {TIMEZONES.map((tz) => (
+                  <option key={tz.value} value={tz.value}>
+                    {tz.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Used for calculating daily metrics like steps and calories
+              </p>
             </div>
           </div>
           <Button onClick={handleSaveProfile} disabled={savingProfile}>
