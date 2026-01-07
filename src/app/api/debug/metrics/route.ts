@@ -64,6 +64,36 @@ export async function GET() {
     .orderBy(desc(healthMetrics.recordedAt))
     .limit(5);
 
+  // Get calories_active specifically (recent 5)
+  const caloriesActive = await db
+    .select()
+    .from(healthMetrics)
+    .where(
+      and(
+        eq(healthMetrics.userId, user.id),
+        eq(healthMetrics.metricType, "calories_active")
+      )
+    )
+    .orderBy(desc(healthMetrics.recordedAt))
+    .limit(5);
+
+  // Get today's calories breakdown
+  const todaysCalories = await db
+    .select({
+      total: sql<number>`SUM(CAST(${healthMetrics.value} AS DECIMAL))`,
+      count: sql<number>`count(*)::int`,
+      minTime: sql<string>`MIN(${healthMetrics.recordedAt})`,
+      maxTime: sql<string>`MAX(${healthMetrics.recordedAt})`,
+    })
+    .from(healthMetrics)
+    .where(
+      and(
+        eq(healthMetrics.userId, user.id),
+        eq(healthMetrics.metricType, "calories_active"),
+        gte(healthMetrics.recordedAt, today)
+      )
+    );
+
   // Get recent webhook logs
   const recentLogs = await db
     .select()
@@ -89,7 +119,9 @@ export async function GET() {
     serverTodayUTC: today.toISOString(),
     metricTypes,
     todaysSteps: todaysSteps[0],
+    todaysCalories: todaysCalories[0],
     restingHR,
+    caloriesActive,
     suspiciousData, // Test data with round values
     recentMetrics,
     recentLogs,
