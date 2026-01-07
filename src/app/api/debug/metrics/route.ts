@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { db, healthMetrics, webhookLogs } from "@/lib/db";
-import { eq, desc, sql, gte, and } from "drizzle-orm";
+import { eq, desc, sql, gte, and, or, isNull } from "drizzle-orm";
 
 // Debug endpoint to check what metrics are stored
 // DELETE THIS IN PRODUCTION!
@@ -72,12 +72,80 @@ export async function GET() {
     .orderBy(desc(webhookLogs.createdAt))
     .limit(5);
 
+  // Find suspicious test data (round numbers, missing originalSource)
+  const suspiciousData = await db
+    .select()
+    .from(healthMetrics)
+    .where(
+      and(
+        eq(healthMetrics.userId, user.id),
+        eq(healthMetrics.metricType, "steps"),
+        sql`CAST(${healthMetrics.value} AS DECIMAL) >= 100` // Round numbers >= 100
+      )
+    )
+    .limit(20);
+
   return NextResponse.json({
     serverTodayUTC: today.toISOString(),
     metricTypes,
     todaysSteps: todaysSteps[0],
     restingHR,
+    suspiciousData, // Test data with round values
     recentMetrics,
     recentLogs,
   });
+}
+
+// DELETE suspicious/test data
+export async function DELETE(request: Request) {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const action = searchParams.get("action");
+
+  if (action === "test-data") {
+    // Delete step records with suspiciously round values (likely test data)
+    const deleted = await db
+      .delete(healthMetrics)
+      .where(
+        and(
+          eq(healthMetrics.userId, user.id),
+          eq(healthMetrics.metricType, "steps"),
+          sql`CAST(${healthMetrics.value} AS DECIMAL) >= 100`
+        )
+      )
+      .returning({ id: healthMetrics.id, value: healthMetrics.value });
+
+    return NextResponse.json({
+      message: "Deleted suspicious test data",
+      deletedCount: deleted.length,
+      deleted,
+    });
+  }
+
+  if (action === "all-steps") {
+    // Nuclear option: delete ALL step data to start fresh
+    const deleted = await db
+      .delete(healthMetrics)
+      .where(
+        and(
+          eq(healthMetrics.userId, user.id),
+          eq(healthMetrics.metricType, "steps")
+        )
+      )
+      .returning({ id: healthMetrics.id });
+
+    return NextResponse.json({
+      message: "Deleted all step data",
+      deletedCount: deleted.length,
+    });
+  }
+
+  return NextResponse.json({
+    error: "Specify action: ?action=test-data or ?action=all-steps",
+  }, { status: 400 });
 }
