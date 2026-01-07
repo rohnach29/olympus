@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { db, healthMetrics, sleepSessions, workouts } from "@/lib/db";
-import { eq, desc, gte, and } from "drizzle-orm";
+import { eq, desc, gte, and, sql } from "drizzle-orm";
 
 // Default values when no data available
 const defaultMetrics = {
@@ -58,33 +58,56 @@ export default async function DashboardPage() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      // Fetch recent health metrics from Apple Watch
-      const recentMetrics = await db
+      // Fetch point-in-time metrics (most recent value) - HR, HRV
+      const pointInTimeMetrics = await db
         .select()
         .from(healthMetrics)
-        .where(eq(healthMetrics.userId, user.id))
+        .where(
+          and(
+            eq(healthMetrics.userId, user.id),
+            sql`${healthMetrics.metricType} IN ('resting_heart_rate', 'hrv', 'respiratory_rate', 'blood_oxygen')`
+          )
+        )
         .orderBy(desc(healthMetrics.recordedAt))
-        .limit(50);
+        .limit(20);
 
-      if (recentMetrics.length > 0) {
-        const metricMap: Record<string, number> = {};
-        recentMetrics.forEach((m) => {
-          // Only take the most recent value for each type
-          if (!metricMap[m.metricType]) {
-            metricMap[m.metricType] = Number(m.value);
-          }
-        });
+      const metricMap: Record<string, number> = {};
+      pointInTimeMetrics.forEach((m) => {
+        if (!metricMap[m.metricType]) {
+          metricMap[m.metricType] = Number(m.value);
+        }
+      });
 
-        // Map from our stored metric names to display
-        metrics = {
-          heartRate: metricMap["resting_heart_rate"] ?? null,
-          hrv: metricMap["hrv"] ?? null,
-          steps: metricMap["steps"] ?? null,
-          calories: metricMap["calories_active"] ?? null,
-          sleepHours: null, // Will get from sleepSessions
-          activeMinutes: metricMap["exercise_minutes"] ?? null,
-        };
-      }
+      // Fetch cumulative metrics (sum for today) - Steps, Calories, Exercise Minutes
+      const cumulativeMetrics = await db
+        .select({
+          metricType: healthMetrics.metricType,
+          total: sql<number>`SUM(CAST(${healthMetrics.value} AS DECIMAL))`,
+        })
+        .from(healthMetrics)
+        .where(
+          and(
+            eq(healthMetrics.userId, user.id),
+            gte(healthMetrics.recordedAt, today),
+            sql`${healthMetrics.metricType} IN ('steps', 'calories_active', 'exercise_minutes')`
+          )
+        )
+        .groupBy(healthMetrics.metricType);
+
+      const cumulativeMap: Record<string, number> = {};
+      cumulativeMetrics.forEach((m) => {
+        cumulativeMap[m.metricType] = Math.round(Number(m.total));
+      });
+
+      // Map from our stored metric names to display
+      metrics = {
+        heartRate: metricMap["resting_heart_rate"] ?? null,
+        hrv: metricMap["hrv"] ?? null,
+        steps: cumulativeMap["steps"] ?? null,
+        calories: cumulativeMap["calories_active"] ?? null,
+        sleepHours: null, // Will get from sleepSessions
+        activeMinutes: cumulativeMap["exercise_minutes"] ?? null,
+      };
 
       // Fetch most recent sleep session
       const recentSleep = await db
