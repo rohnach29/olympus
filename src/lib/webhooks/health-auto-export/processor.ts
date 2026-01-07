@@ -37,14 +37,15 @@ export async function processHealthAutoExport(
   const timestamps = extractTimestamps(metricsArray, workoutsArray);
   const idempotencyKey = generateIdempotencyKey(userId, timestamps);
 
-  // Check for duplicate request
+  // Check for duplicate request - only skip if previous attempt SUCCEEDED
   const [existingLog] = await db
     .select()
     .from(webhookLogs)
     .where(
       and(
         eq(webhookLogs.userId, userId),
-        eq(webhookLogs.idempotencyKey, idempotencyKey)
+        eq(webhookLogs.idempotencyKey, idempotencyKey),
+        eq(webhookLogs.status, "success") // Only treat as duplicate if it succeeded before
       )
     )
     .limit(1);
@@ -53,17 +54,18 @@ export async function processHealthAutoExport(
     result.status = "success"; // Treat duplicates as successful (idempotent)
     result.errors.push("Duplicate request - already processed");
 
-    // Log as duplicate
-    await db.insert(webhookLogs).values({
-      userId,
-      tokenId,
-      idempotencyKey: `${idempotencyKey}-dup-${Date.now()}`,
-      status: "duplicate",
-      errors: ["Duplicate of previous request"],
-    });
-
-    return result;
+    return result; // Don't log duplicates, just return
   }
+
+  // Clean up any previous failed attempts with this key
+  await db
+    .delete(webhookLogs)
+    .where(
+      and(
+        eq(webhookLogs.userId, userId),
+        eq(webhookLogs.idempotencyKey, idempotencyKey)
+      )
+    );
 
   try {
     // 1. Process health metrics
