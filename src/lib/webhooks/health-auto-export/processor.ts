@@ -69,6 +69,8 @@ export async function processHealthAutoExport(
 
   try {
     // 1. Process health metrics
+    const unmappedMetrics: string[] = [];
+
     for (const metric of metricsArray) {
       // Skip sleep_analysis as we handle it separately
       if (metric.name === "sleep_analysis" || metric.name === "sleepAnalysis") {
@@ -76,6 +78,11 @@ export async function processHealthAutoExport(
       }
 
       const mappedMetrics = mapMetricToOlympus(userId, metric);
+
+      // Track metrics that didn't map (for debugging)
+      if (mappedMetrics.length === 0 && metric.data.length > 0) {
+        unmappedMetrics.push(metric.name);
+      }
 
       for (const mapped of mappedMetrics) {
         try {
@@ -214,11 +221,16 @@ export async function processHealthAutoExport(
       }
     }
 
+    // Log unmapped metrics for debugging
+    if (unmappedMetrics.length > 0) {
+      result.errors.push(`Unmapped metrics (not stored): ${unmappedMetrics.join(", ")}`);
+    }
+
     // Determine final status
-    if (result.errors.length > 0) {
-      result.status = (result.metricsProcessed + result.sleepSessionsProcessed + result.workoutsProcessed) > 0
-        ? "partial"
-        : "failed";
+    if (result.errors.length > 0 && result.metricsProcessed === 0 && result.sleepSessionsProcessed === 0 && result.workoutsProcessed === 0) {
+      result.status = "failed";
+    } else if (result.errors.length > 0) {
+      result.status = "partial";
     }
 
     // 4. Log the webhook request

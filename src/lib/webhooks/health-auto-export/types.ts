@@ -68,21 +68,52 @@ export interface ProcessingResult {
 }
 
 // Metric type mapping to Olympus
+// Health Auto Export may use different naming conventions
 export const METRIC_TYPE_MAP: Record<string, string> = {
+  // HRV variations
   heart_rate_variability_sdnn: "hrv",
+  heartRateVariabilitySDNN: "hrv",
+  hrv: "hrv",
+  HRV: "hrv",
+  heart_rate_variability: "hrv",
+  heartRateVariability: "hrv",
+
+  // Heart rate
   resting_heart_rate: "resting_heart_rate",
+  restingHeartRate: "resting_heart_rate",
   heart_rate: "heart_rate",
+  heartRate: "heart_rate",
+
+  // Steps
   step_count: "steps",
+  stepCount: "steps",
+  steps: "steps",
+
+  // Calories
   active_energy_burned: "calories_active",
+  activeEnergyBurned: "calories_active",
+  active_energy: "calories_active",
+  activeEnergy: "calories_active",
   basal_energy_burned: "calories_basal",
+  basalEnergyBurned: "calories_basal",
+
+  // Other metrics
   respiratory_rate: "respiratory_rate",
+  respiratoryRate: "respiratory_rate",
   blood_oxygen_saturation: "blood_oxygen",
+  bloodOxygenSaturation: "blood_oxygen",
   oxygen_saturation: "blood_oxygen",
+  oxygenSaturation: "blood_oxygen",
   walking_heart_rate_average: "walking_heart_rate",
+  walkingHeartRateAverage: "walking_heart_rate",
   walking_running_distance: "distance",
+  walkingRunningDistance: "distance",
   flights_climbed: "flights_climbed",
+  flightsClimbed: "flights_climbed",
   apple_exercise_time: "exercise_minutes",
+  appleExerciseTime: "exercise_minutes",
   apple_stand_hour: "stand_hours",
+  appleStandHour: "stand_hours",
 };
 
 // Workout type mapping to Olympus
