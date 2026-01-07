@@ -54,9 +54,17 @@ export default async function DashboardPage() {
 
   if (user) {
     try {
-      // Get today's date range
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      // Get today's date range in IST (UTC+5:30)
+      // TODO: Get timezone from user settings instead of hardcoding
+      const now = new Date();
+      const istOffset = 5.5 * 60 * 60 * 1000; // 5.5 hours in ms
+      const istNow = new Date(now.getTime() + istOffset);
+      const today = new Date(Date.UTC(
+        istNow.getUTCFullYear(),
+        istNow.getUTCMonth(),
+        istNow.getUTCDate(),
+        0, 0, 0, 0
+      ) - istOffset); // Midnight IST in UTC
 
       // Fetch point-in-time metrics (most recent value) - HR, HRV
       const pointInTimeMetrics = await db
@@ -74,7 +82,11 @@ export default async function DashboardPage() {
       const metricMap: Record<string, number> = {};
       pointInTimeMetrics.forEach((m) => {
         if (!metricMap[m.metricType]) {
-          metricMap[m.metricType] = Number(m.value);
+          // Round HRV and heart rate to whole numbers
+          const value = Number(m.value);
+          metricMap[m.metricType] = ['hrv', 'resting_heart_rate', 'heart_rate'].includes(m.metricType)
+            ? Math.round(value)
+            : value;
         }
       });
 
