@@ -86,22 +86,15 @@ export async function processHealthAutoExport(
 
       for (const mapped of mappedMetrics) {
         try {
-          // Check for duplicate (same user, type, timestamp)
-          const existing = await db
-            .select({ id: healthMetrics.id })
-            .from(healthMetrics)
-            .where(
-              and(
-                eq(healthMetrics.userId, userId),
-                eq(healthMetrics.metricType, mapped.metricType),
-                eq(healthMetrics.recordedAt, mapped.recordedAt),
-                eq(healthMetrics.source, "apple_health")
-              )
-            )
-            .limit(1);
+          // UPSERT: Insert if not exists, do nothing if duplicate
+          // The unique constraint (userId, metricType, recordedAt) prevents duplicates
+          const inserted = await db
+            .insert(healthMetrics)
+            .values(mapped)
+            .onConflictDoNothing()
+            .returning({ id: healthMetrics.id });
 
-          if (existing.length === 0) {
-            await db.insert(healthMetrics).values(mapped);
+          if (inserted.length > 0) {
             result.metricsProcessed++;
           }
         } catch (err) {
@@ -121,70 +114,64 @@ export async function processHealthAutoExport(
           continue; // Skip invalid sleep data
         }
 
-        // Check for duplicate (same user, sleep date, source)
-        const existing = await db
-          .select({ id: sleepSessions.id })
-          .from(sleepSessions)
-          .where(
-            and(
-              eq(sleepSessions.userId, userId),
-              eq(sleepSessions.sleepDate, mapped.sleepDate),
-              eq(sleepSessions.source, "apple_health")
-            )
-          )
-          .limit(1);
+        // Calculate sleep score using existing scoring algorithm
+        let sleepScore: number | null = null;
 
-        if (existing.length === 0) {
-          // Calculate sleep score using existing scoring algorithm
-          let sleepScore: number | null = null;
+        try {
+          // Get user's sleep history for baseline
+          const historyRaw = await db
+            .select()
+            .from(sleepSessions)
+            .where(eq(sleepSessions.userId, userId))
+            .orderBy(sql`${sleepSessions.sleepDate} DESC`)
+            .limit(14);
 
-          try {
-            // Get user's sleep history for baseline
-            const historyRaw = await db
-              .select()
-              .from(sleepSessions)
-              .where(eq(sleepSessions.userId, userId))
-              .orderBy(sql`${sleepSessions.sleepDate} DESC`)
-              .limit(14);
+          // Map to non-nullable values for baseline calculation
+          const history = historyRaw.map((s) => ({
+            totalMinutes: s.totalMinutes,
+            inBedMinutes: s.inBedMinutes,
+            deepSleepMinutes: s.deepSleepMinutes ?? 0,
+            remSleepMinutes: s.remSleepMinutes ?? 0,
+            lightSleepMinutes: s.lightSleepMinutes ?? 0,
+            awakeMinutes: s.awakeMinutes ?? 0,
+            sleepLatencyMinutes: s.sleepLatencyMinutes ?? 0,
+            hrvAvg: s.hrvAvg,
+          }));
 
-            // Map to non-nullable values for baseline calculation
-            const history = historyRaw.map((s) => ({
-              totalMinutes: s.totalMinutes,
-              inBedMinutes: s.inBedMinutes,
-              deepSleepMinutes: s.deepSleepMinutes ?? 0,
-              remSleepMinutes: s.remSleepMinutes ?? 0,
-              lightSleepMinutes: s.lightSleepMinutes ?? 0,
-              awakeMinutes: s.awakeMinutes ?? 0,
-              sleepLatencyMinutes: s.sleepLatencyMinutes ?? 0,
-              hrvAvg: s.hrvAvg,
-            }));
+          const baseline = calculatePersonalBaseline(history);
 
-            const baseline = calculatePersonalBaseline(history);
+          const scoreResult = calculateSleepScore(
+            {
+              totalMinutes: mapped.totalMinutes,
+              inBedMinutes: mapped.inBedMinutes,
+              deepSleepMinutes: mapped.deepSleepMinutes ?? 0,
+              remSleepMinutes: mapped.remSleepMinutes ?? 0,
+              lightSleepMinutes: mapped.lightSleepMinutes ?? 0,
+              sleepLatencyMinutes: mapped.sleepLatencyMinutes ?? 0,
+              awakeMinutes: mapped.awakeMinutes ?? 0,
+              hrvAvg: null, // Not available from sleep data
+            },
+            baseline
+          );
 
-            const scoreResult = calculateSleepScore(
-              {
-                totalMinutes: mapped.totalMinutes,
-                inBedMinutes: mapped.inBedMinutes,
-                deepSleepMinutes: mapped.deepSleepMinutes ?? 0,
-                remSleepMinutes: mapped.remSleepMinutes ?? 0,
-                lightSleepMinutes: mapped.lightSleepMinutes ?? 0,
-                sleepLatencyMinutes: mapped.sleepLatencyMinutes ?? 0,
-                awakeMinutes: mapped.awakeMinutes ?? 0,
-                hrvAvg: null, // Not available from sleep data
-              },
-              baseline
-            );
+          sleepScore = scoreResult.totalScore;
+        } catch (scoreErr) {
+          // Score calculation failed, continue without score
+          console.error("Sleep score calculation failed:", scoreErr);
+        }
 
-            sleepScore = scoreResult.totalScore;
-          } catch (scoreErr) {
-            // Score calculation failed, continue without score
-            console.error("Sleep score calculation failed:", scoreErr);
-          }
-
-          await db.insert(sleepSessions).values({
+        // UPSERT: Insert if not exists, do nothing if duplicate
+        // The unique constraint (userId, sleepDate, source) prevents duplicates
+        const inserted = await db
+          .insert(sleepSessions)
+          .values({
             ...mapped,
             sleepScore,
-          });
+          })
+          .onConflictDoNothing()
+          .returning({ id: sleepSessions.id });
+
+        if (inserted.length > 0) {
           result.sleepSessionsProcessed++;
         }
       } catch (err) {
@@ -198,21 +185,15 @@ export async function processHealthAutoExport(
       try {
         const mapped = mapWorkoutToOlympus(userId, workout);
 
-        // Check for duplicate (same user, start time, type)
-        const existing = await db
-          .select({ id: workouts.id })
-          .from(workouts)
-          .where(
-            and(
-              eq(workouts.userId, userId),
-              eq(workouts.startedAt, mapped.startedAt),
-              eq(workouts.type, mapped.type)
-            )
-          )
-          .limit(1);
+        // UPSERT: Insert if not exists, do nothing if duplicate
+        // The unique constraint (userId, startedAt, type) prevents duplicates
+        const inserted = await db
+          .insert(workouts)
+          .values(mapped)
+          .onConflictDoNothing()
+          .returning({ id: workouts.id });
 
-        if (existing.length === 0) {
-          await db.insert(workouts).values(mapped);
+        if (inserted.length > 0) {
           result.workoutsProcessed++;
         }
       } catch (err) {

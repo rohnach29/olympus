@@ -9,6 +9,7 @@ import {
   jsonb,
   boolean,
   primaryKey,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 // Users table
@@ -56,7 +57,14 @@ export const healthMetrics = pgTable("health_metrics", {
   recordedAt: timestamp("recorded_at").notNull(),
   metadata: jsonb("metadata").default({}),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  // Prevent duplicate metrics: same user, type, and timestamp = same metric
+  uniqueMetric: uniqueIndex("health_metrics_unique_idx").on(
+    table.userId,
+    table.metricType,
+    table.recordedAt
+  ),
+}));
 
 // Foods database
 export const foods = pgTable("foods", {
@@ -273,7 +281,14 @@ export const workouts = pgTable("workouts", {
   notes: text("notes"),
   metadata: jsonb("metadata").default({}),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  // Prevent duplicate workouts: same user, start time, and type = same workout
+  uniqueWorkout: uniqueIndex("workouts_unique_idx").on(
+    table.userId,
+    table.startedAt,
+    table.type
+  ),
+}));
 
 // Sleep sessions (Apple Health style)
 export const sleepSessions = pgTable("sleep_sessions", {
@@ -311,7 +326,14 @@ export const sleepSessions = pgTable("sleep_sessions", {
   source: text("source").notNull().default("manual"), // 'manual', 'apple_health', 'whoop', 'oura'
   metadata: jsonb("metadata").default({}),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  // One sleep session per user per night per source
+  uniqueSleep: uniqueIndex("sleep_sessions_unique_idx").on(
+    table.userId,
+    table.sleepDate,
+    table.source
+  ),
+}));
 
 // Daily scores (computed/cached)
 export const dailyScores = pgTable(
