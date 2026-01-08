@@ -217,7 +217,59 @@ export async function DELETE(request: Request) {
     });
   }
 
+  if (action === "dedupe-hrv") {
+    // Remove duplicate HRV records, keeping only the first one per timestamp
+    // This uses a subquery to find all IDs that are NOT the "first" record for each unique combo
+    const duplicates = await db.execute(sql`
+      DELETE FROM health_metrics
+      WHERE id IN (
+        SELECT id FROM (
+          SELECT id,
+            ROW_NUMBER() OVER (
+              PARTITION BY user_id, metric_type, recorded_at
+              ORDER BY created_at ASC
+            ) as rn
+          FROM health_metrics
+          WHERE user_id = ${user.id}
+            AND metric_type = 'hrv'
+        ) subq
+        WHERE rn > 1
+      )
+      RETURNING id
+    `);
+
+    return NextResponse.json({
+      message: "Removed duplicate HRV records",
+      deletedCount: Array.isArray(duplicates) ? duplicates.length : 0,
+    });
+  }
+
+  if (action === "dedupe-all") {
+    // Remove ALL duplicate health metrics (any type), keeping only the first one per timestamp
+    const duplicates = await db.execute(sql`
+      DELETE FROM health_metrics
+      WHERE id IN (
+        SELECT id FROM (
+          SELECT id,
+            ROW_NUMBER() OVER (
+              PARTITION BY user_id, metric_type, recorded_at
+              ORDER BY created_at ASC
+            ) as rn
+          FROM health_metrics
+          WHERE user_id = ${user.id}
+        ) subq
+        WHERE rn > 1
+      )
+      RETURNING id
+    `);
+
+    return NextResponse.json({
+      message: "Removed all duplicate health metrics",
+      deletedCount: Array.isArray(duplicates) ? duplicates.length : 0,
+    });
+  }
+
   return NextResponse.json({
-    error: "Specify action: ?action=test-data or ?action=all-steps",
+    error: "Specify action: ?action=test-data, ?action=all-steps, ?action=dedupe-hrv, or ?action=dedupe-all",
   }, { status: 400 });
 }
