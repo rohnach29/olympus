@@ -408,11 +408,11 @@ async function getTodaysFoodLog() {
       fiber_g,
       sugar_g,
       sodium_mg,
-      logged_at
+      created_at
     FROM food_logs
     WHERE user_id = ${USER_ID}
       AND logged_date = ${todayDateStr}
-    ORDER BY logged_at ASC
+    ORDER BY created_at ASC
   `;
 
   // Group by meal type
@@ -545,8 +545,7 @@ async function logFood(params: LogFoodParams) {
       calcium_mg,
       iron_mg,
       potassium_mg,
-      logged_date,
-      logged_at
+      logged_date
     ) VALUES (
       ${USER_ID},
       ${params.foodName},
@@ -569,8 +568,7 @@ async function logFood(params: LogFoodParams) {
       ${params.calciumMg || 0},
       ${params.ironMg || 0},
       ${params.potassiumMg || 0},
-      ${todayDateStr},
-      NOW()
+      ${todayDateStr}
     )
     RETURNING id
   `;
