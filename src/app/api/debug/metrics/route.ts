@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { db, healthMetrics, webhookLogs } from "@/lib/db";
 import { eq, desc, sql, gte, and, or, isNull } from "drizzle-orm";
+import { getTodayInTimezone, getUserTimezone } from "@/lib/utils/timezone";
 
 // Debug endpoint to check what metrics are stored
 // DELETE THIS IN PRODUCTION!
@@ -12,9 +13,9 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Get today's date range (UTC)
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
+  // Get today's date range in USER'S timezone (not UTC!)
+  const userTimezone = getUserTimezone(user.settings);
+  const today = getTodayInTimezone(userTimezone);
 
   // Get unique metric types stored
   const metricTypes = await db
@@ -152,7 +153,8 @@ export async function GET() {
     .limit(20);
 
   return NextResponse.json({
-    serverTodayUTC: today.toISOString(),
+    timezone: userTimezone,
+    todayStartsAt: today.toISOString(),  // Midnight in user's timezone (as UTC)
     metricTypes,
     todaysSteps: todaysSteps[0],
     todaysCalories: todaysCalories[0],

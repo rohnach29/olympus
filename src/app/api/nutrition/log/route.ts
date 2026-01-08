@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { db, foodLogs, foods, recentFoods } from "@/lib/db";
 import { eq, and, desc } from "drizzle-orm";
+import { getTodayDateString, getUserTimezone } from "@/lib/utils/timezone";
 
 // GET - Get food logs for a specific date
 export async function GET(request: NextRequest) {
@@ -12,7 +13,9 @@ export async function GET(request: NextRequest) {
     }
 
     const searchParams = request.nextUrl.searchParams;
-    const date = searchParams.get("date") || new Date().toISOString().split("T")[0];
+    // Default to today in user's timezone
+    const userTimezone = getUserTimezone(user.settings);
+    const date = searchParams.get("date") || getTodayDateString(userTimezone);
 
     const logs = await db
       .select()
@@ -115,7 +118,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const date = loggedDate || new Date().toISOString().split("T")[0];
+    // Default to today in user's timezone
+    const userTimezone = getUserTimezone(user.settings);
+    const date = loggedDate || getTodayDateString(userTimezone);
 
     // Insert food log
     const [newLog] = await db

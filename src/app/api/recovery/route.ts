@@ -9,6 +9,7 @@ import {
   RecoveryBaseline,
   WorkoutData,
 } from "@/lib/utils/recovery-scoring";
+import { getTodayInTimezone, getTodayDateString, getUserTimezone } from "@/lib/utils/timezone";
 
 // GET - Get recovery/daily scores and health metrics with evidence-based calculations
 export async function GET(request: NextRequest) {
@@ -21,10 +22,13 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const days = parseInt(searchParams.get("days") || "7");
 
-    const today = new Date().toISOString().split("T")[0];
+    // Use user's timezone for "today" calculation
+    const userTimezone = getUserTimezone(user.settings);
+    const today = getTodayDateString(userTimezone);
+    const todayStart = getTodayInTimezone(userTimezone);
 
-    // Get date 14 days ago for baseline calculation
-    const baselineDate = new Date();
+    // Get date 14 days ago for baseline calculation (relative, so timezone doesn't matter much)
+    const baselineDate = new Date(todayStart);
     baselineDate.setDate(baselineDate.getDate() - 14);
 
     // Fetch sleep sessions for baseline and current data
@@ -60,13 +64,11 @@ export async function GET(request: NextRequest) {
       metricsByType[m.metricType].values.push(Number(m.value));
     });
 
-    // Get yesterday's workouts for strain calculation
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStart = new Date(yesterday);
-    yesterdayStart.setHours(0, 0, 0, 0);
-    const yesterdayEnd = new Date(yesterday);
-    yesterdayEnd.setHours(23, 59, 59, 999);
+    // Get yesterday's workouts for strain calculation (in user's timezone)
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+    // yesterdayEnd is just before todayStart
+    const yesterdayEnd = new Date(todayStart.getTime() - 1);
 
     const yesterdayWorkouts = await db
       .select()
