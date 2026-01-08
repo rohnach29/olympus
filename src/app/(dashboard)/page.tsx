@@ -8,7 +8,6 @@ import {
   Moon,
   Flame,
   Activity,
-  TrendingUp,
   Utensils,
   Dumbbell,
 } from "lucide-react";
@@ -23,7 +22,6 @@ const defaultMetrics = {
   steps: null as number | null,
   calories: null as number | null,
   sleepDisplay: null as string | null, // Formatted as "8h 42m"
-  activeMinutes: null as number | null,
 };
 
 // Helper to format minutes as "Xh Ym"
@@ -122,7 +120,7 @@ export default async function DashboardPage() {
           and(
             eq(healthMetrics.userId, user.id),
             gte(healthMetrics.recordedAt, today),
-            sql`${healthMetrics.metricType} IN ('steps', 'calories_active', 'exercise_minutes')`
+            sql`${healthMetrics.metricType} IN ('steps', 'calories_active')`
           )
         )
         .groupBy(healthMetrics.metricType);
@@ -139,7 +137,6 @@ export default async function DashboardPage() {
         steps: cumulativeMap["steps"] ?? null,
         calories: cumulativeMap["calories_active"] ?? null,
         sleepDisplay: null, // Will get from sleepSessions
-        activeMinutes: cumulativeMap["exercise_minutes"] ?? null,
       };
 
       // Fetch most recent sleep session
@@ -247,7 +244,7 @@ export default async function DashboardPage() {
       {/* Key Metrics */}
       <section>
         <h2 className="text-lg font-semibold mb-4">Today&apos;s Metrics</h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <MetricCard
             title="Resting HR"
             value={metrics.heartRate}
@@ -280,13 +277,6 @@ export default async function DashboardPage() {
             value={metrics.sleepDisplay}
             icon={Moon}
             iconColor="text-indigo-500"
-          />
-          <MetricCard
-            title="Active"
-            value={metrics.activeMinutes}
-            unit="min"
-            icon={TrendingUp}
-            iconColor="text-green-500"
           />
         </div>
       </section>

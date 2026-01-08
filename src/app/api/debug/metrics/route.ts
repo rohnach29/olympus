@@ -64,6 +64,42 @@ export async function GET() {
     .orderBy(desc(healthMetrics.recordedAt))
     .limit(5);
 
+  // Get HRV data (recent values)
+  const hrvData = await db
+    .select({
+      id: healthMetrics.id,
+      value: healthMetrics.value,
+      unit: healthMetrics.unit,
+      recordedAt: healthMetrics.recordedAt,
+      metadata: healthMetrics.metadata,
+    })
+    .from(healthMetrics)
+    .where(
+      and(
+        eq(healthMetrics.userId, user.id),
+        eq(healthMetrics.metricType, "hrv")
+      )
+    )
+    .orderBy(desc(healthMetrics.recordedAt))
+    .limit(10);
+
+  // Get today's HRV specifically
+  const todaysHRV = await db
+    .select({
+      value: healthMetrics.value,
+      recordedAt: healthMetrics.recordedAt,
+      metadata: healthMetrics.metadata,
+    })
+    .from(healthMetrics)
+    .where(
+      and(
+        eq(healthMetrics.userId, user.id),
+        eq(healthMetrics.metricType, "hrv"),
+        gte(healthMetrics.recordedAt, today)
+      )
+    )
+    .orderBy(desc(healthMetrics.recordedAt));
+
   // Get calories_active specifically (recent 5)
   const caloriesActive = await db
     .select()
@@ -120,6 +156,10 @@ export async function GET() {
     metricTypes,
     todaysSteps: todaysSteps[0],
     todaysCalories: todaysCalories[0],
+    hrv: {
+      todaysHRV,
+      recentHRV: hrvData,
+    },
     restingHR,
     caloriesActive,
     suspiciousData, // Test data with round values
