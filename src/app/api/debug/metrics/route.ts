@@ -271,7 +271,73 @@ export async function DELETE(request: Request) {
     });
   }
 
+  if (action === "dedupe-steps") {
+    // Remove duplicate steps by grouping to the nearest MINUTE
+    // This handles the case where the same step sample is recorded at :00 and :04
+    // We keep the record with the highest value per minute (most accurate count)
+    const duplicates = await db.execute(sql`
+      DELETE FROM health_metrics
+      WHERE id IN (
+        SELECT id FROM (
+          SELECT id,
+            ROW_NUMBER() OVER (
+              PARTITION BY user_id, metric_type, DATE_TRUNC('minute', recorded_at)
+              ORDER BY CAST(value AS DECIMAL) DESC, created_at ASC
+            ) as rn
+          FROM health_metrics
+          WHERE user_id = ${user.id}
+            AND metric_type = 'steps'
+        ) subq
+        WHERE rn > 1
+      )
+      RETURNING id
+    `);
+
+    // Get the new count after deduplication
+    const newCount = await db.execute(sql`
+      SELECT COUNT(*) as count, SUM(CAST(value AS DECIMAL)) as total
+      FROM health_metrics
+      WHERE user_id = ${user.id}
+        AND metric_type = 'steps'
+    `);
+
+    return NextResponse.json({
+      message: "Removed duplicate step records (grouped by minute)",
+      deletedCount: Array.isArray(duplicates) ? duplicates.length : 0,
+      remaining: newCount[0],
+    });
+  }
+
+  if (action === "dedupe-cumulative") {
+    // Remove duplicates for ALL cumulative metrics (steps, calories, distance, etc.)
+    // Groups by minute and keeps the highest value
+    const cumulativeTypes = ['steps', 'calories_active', 'calories_basal', 'distance', 'exercise_minutes', 'flights_climbed', 'stand_hours'];
+
+    const duplicates = await db.execute(sql`
+      DELETE FROM health_metrics
+      WHERE id IN (
+        SELECT id FROM (
+          SELECT id,
+            ROW_NUMBER() OVER (
+              PARTITION BY user_id, metric_type, DATE_TRUNC('minute', recorded_at)
+              ORDER BY CAST(value AS DECIMAL) DESC, created_at ASC
+            ) as rn
+          FROM health_metrics
+          WHERE user_id = ${user.id}
+            AND metric_type = ANY(${cumulativeTypes})
+        ) subq
+        WHERE rn > 1
+      )
+      RETURNING id, metric_type
+    `);
+
+    return NextResponse.json({
+      message: "Removed duplicate cumulative metrics (grouped by minute)",
+      deletedCount: Array.isArray(duplicates) ? duplicates.length : 0,
+    });
+  }
+
   return NextResponse.json({
-    error: "Specify action: ?action=test-data, ?action=all-steps, ?action=dedupe-hrv, or ?action=dedupe-all",
+    error: "Specify action: ?action=test-data, ?action=all-steps, ?action=dedupe-hrv, ?action=dedupe-all, ?action=dedupe-steps, or ?action=dedupe-cumulative",
   }, { status: 400 });
 }

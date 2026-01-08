@@ -8,6 +8,25 @@ import {
 import { NewHealthMetric, NewSleepSession, NewWorkout } from "@/lib/db";
 
 /**
+ * Cumulative metrics that should have timestamps rounded to the nearest minute.
+ * This prevents duplicate records when the same sample is exported multiple times
+ * with slightly different timestamps (e.g., 02:47:00 vs 02:47:04).
+ */
+const CUMULATIVE_METRICS = [
+  'steps', 'calories_active', 'calories_basal', 'distance',
+  'exercise_minutes', 'flights_climbed', 'stand_hours'
+];
+
+/**
+ * Round a date to the nearest minute (removes seconds and milliseconds)
+ */
+function roundToMinute(date: Date): Date {
+  const rounded = new Date(date);
+  rounded.setSeconds(0, 0);
+  return rounded;
+}
+
+/**
  * Map a Health Auto Export metric to Olympus healthMetrics format
  */
 export function mapMetricToOlympus(
@@ -21,20 +40,28 @@ export function mapMetricToOlympus(
     return [];
   }
 
+  // For cumulative metrics, round timestamp to the minute to prevent duplicates
+  const shouldRoundTimestamp = CUMULATIVE_METRICS.includes(metricType);
+
   return metric.data
     .filter((point) => point.qty != null && !isNaN(point.qty))
-    .map((point) => ({
-      userId,
-      metricType,
-      value: String(point.qty),
-      unit: metric.units || null,
-      source: "apple_health",
-      recordedAt: new Date(point.date),
-      metadata: {
-        originalName: metric.name,
-        originalSource: point.source,
-      },
-    }));
+    .map((point) => {
+      const rawDate = new Date(point.date);
+      const recordedAt = shouldRoundTimestamp ? roundToMinute(rawDate) : rawDate;
+
+      return {
+        userId,
+        metricType,
+        value: String(point.qty),
+        unit: metric.units || null,
+        source: "apple_health",
+        recordedAt,
+        metadata: {
+          originalName: metric.name,
+          originalSource: point.source,
+        },
+      };
+    });
 }
 
 /**
