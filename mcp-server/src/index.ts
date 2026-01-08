@@ -316,6 +316,75 @@ async function getHealthSummary() {
   };
 }
 
+async function getUserProfile() {
+  const result = await sql`
+    SELECT
+      full_name,
+      date_of_birth,
+      gender,
+      height_cm,
+      weight_kg,
+      settings
+    FROM users
+    WHERE id = ${USER_ID}
+  `;
+
+  if (result.length === 0) {
+    return { error: "User not found" };
+  }
+
+  const user = result[0] as {
+    full_name: string | null;
+    date_of_birth: string | null;
+    gender: string | null;
+    height_cm: string | null;
+    weight_kg: string | null;
+    settings: Record<string, unknown>;
+  };
+
+  // Calculate age if date of birth is available
+  let age: number | null = null;
+  if (user.date_of_birth) {
+    const dob = new Date(user.date_of_birth);
+    const today = new Date();
+    age = today.getFullYear() - dob.getFullYear();
+    const monthDiff = today.getMonth() - dob.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+      age--;
+    }
+  }
+
+  // Calculate BMI if height and weight are available
+  let bmi: number | null = null;
+  let bmiCategory: string | null = null;
+  if (user.height_cm && user.weight_kg) {
+    const heightM = parseFloat(user.height_cm) / 100;
+    const weightKg = parseFloat(user.weight_kg);
+    bmi = Math.round((weightKg / (heightM * heightM)) * 10) / 10;
+
+    if (bmi < 18.5) bmiCategory = "Underweight";
+    else if (bmi < 25) bmiCategory = "Normal";
+    else if (bmi < 30) bmiCategory = "Overweight";
+    else bmiCategory = "Obese";
+  }
+
+  return {
+    name: user.full_name,
+    age,
+    gender: user.gender,
+    height: user.height_cm ? `${user.height_cm} cm` : null,
+    weight: user.weight_kg ? `${user.weight_kg} kg` : null,
+    bmi,
+    bmiCategory,
+    goals: {
+      sleepTarget: `${user.settings?.sleepTargetHours || 8} hours`,
+      calorieTarget: user.settings?.calorieTarget || 2000,
+      proteinTarget: `${user.settings?.proteinTargetG || 150}g`,
+    },
+    timezone: user.settings?.timezone || "UTC",
+  };
+}
+
 // ============================================================================
 // MCP SERVER SETUP
 // This is the boilerplate that connects everything to Claude
@@ -400,6 +469,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: [],
         },
       },
+      {
+        name: "get_user_profile",
+        description: "Get user's profile including height, weight, BMI, age, and health goals. Use this when questions involve body metrics or personalized recommendations.",
+        inputSchema: {
+          type: "object",
+          properties: {},
+          required: [],
+        },
+      },
     ],
   };
 });
@@ -426,6 +504,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case "get_recent_workouts":
         result = await getRecentWorkouts((args?.days as number) || 7);
+        break;
+      case "get_user_profile":
+        result = await getUserProfile();
         break;
       default:
         throw new Error(`Unknown tool: ${name}`);
