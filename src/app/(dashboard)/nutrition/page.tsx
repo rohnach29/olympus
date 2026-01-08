@@ -199,7 +199,12 @@ export default function NutritionPage() {
   // Delete food log
   const handleDeleteLog = async (logId: string) => {
     try {
-      await fetch(`/api/nutrition/log?id=${logId}`, { method: "DELETE" });
+      const response = await fetch(`/api/nutrition/log?id=${logId}`, { method: "DELETE" });
+      if (!response.ok) {
+        const error = await response.json();
+        console.error("Delete failed:", error);
+        return;
+      }
       fetchDayData();
     } catch (error) {
       console.error("Failed to delete log:", error);

@@ -589,6 +589,29 @@ async function logFood(params: LogFoodParams) {
   };
 }
 
+async function deleteFoodLog(logId: string) {
+  const result = await sql`
+    DELETE FROM food_logs
+    WHERE id = ${logId}
+      AND user_id = ${USER_ID}
+    RETURNING id, food_name
+  `;
+
+  if (result.length === 0) {
+    return {
+      success: false,
+      message: "Food log not found or already deleted",
+    };
+  }
+
+  const deleted = result[0] as { id: string; food_name: string };
+  return {
+    success: true,
+    message: `Deleted "${deleted.food_name}" from your food log`,
+    deletedId: deleted.id,
+  };
+}
+
 async function searchFoods(query: string, limit: number = 10) {
   const searchPattern = '%' + query.toLowerCase() + '%';
 
@@ -812,11 +835,25 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_todays_food_log",
-        description: "Get everything the user has eaten today, grouped by meal (breakfast, lunch, dinner, snacks) with calories and macros.",
+        description: "Get everything the user has eaten today, grouped by meal (breakfast, lunch, dinner, snacks) with calories and macros. Each food item has an 'id' field that can be used with delete_food_log.",
         inputSchema: {
           type: "object",
           properties: {},
           required: [],
+        },
+      },
+      {
+        name: "delete_food_log",
+        description: "Delete a food entry from today's log. Use get_todays_food_log first to find the ID of the item to delete.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            logId: {
+              type: "string",
+              description: "The ID of the food log entry to delete (from get_todays_food_log)",
+            },
+          },
+          required: ["logId"],
         },
       },
       {
@@ -967,6 +1004,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case "get_todays_food_log":
         result = await getTodaysFoodLog();
+        break;
+      case "delete_food_log":
+        result = await deleteFoodLog(args?.logId as string);
         break;
       case "log_food":
         result = await logFood(args as unknown as LogFoodParams);
