@@ -233,11 +233,18 @@ export default function NutritionPage() {
     fat: totals.fat * 9,
   };
   const totalMacroCalories = macroCalories.protein + macroCalories.carbs + macroCalories.fat;
-  const macroPercents = {
-    protein: totalMacroCalories > 0 ? Math.round((macroCalories.protein / totalMacroCalories) * 100) : 0,
-    carbs: totalMacroCalories > 0 ? Math.round((macroCalories.carbs / totalMacroCalories) * 100) : 0,
-    fat: totalMacroCalories > 0 ? Math.round((macroCalories.fat / totalMacroCalories) * 100) : 0,
-  };
+
+  // Calculate percentages with 1 decimal, ensuring they sum to 100%
+  const rawProteinPct = totalMacroCalories > 0 ? (macroCalories.protein / totalMacroCalories) * 100 : 0;
+  const rawCarbsPct = totalMacroCalories > 0 ? (macroCalories.carbs / totalMacroCalories) * 100 : 0;
+  const rawFatPct = totalMacroCalories > 0 ? (macroCalories.fat / totalMacroCalories) * 100 : 0;
+
+  // Round protein and carbs, calculate fat as remainder to ensure sum = 100
+  const proteinPct = Math.round(rawProteinPct * 10) / 10;
+  const carbsPct = Math.round(rawCarbsPct * 10) / 10;
+  const fatPct = totalMacroCalories > 0 ? Math.round((100 - proteinPct - carbsPct) * 10) / 10 : 0;
+
+  const macroPercents = { protein: proteinPct, carbs: carbsPct, fat: fatPct };
 
   return (
     <div className="space-y-6">
@@ -317,14 +324,34 @@ export default function NutritionPage() {
               />
             </div>
 
-            {/* Macro Pie (visual) */}
-            <div className="hidden md:flex flex-col items-center justify-center p-4 bg-muted/50 rounded-lg">
-              <div className="text-sm font-medium mb-2">Macro Split</div>
-              <div className="flex gap-2 text-xs">
-                <span className="text-red-500">P: {macroPercents.protein}%</span>
-                <span className="text-amber-500">C: {macroPercents.carbs}%</span>
-                <span className="text-blue-500">F: {macroPercents.fat}%</span>
-              </div>
+            {/* Macro Split Bar */}
+            <div className="hidden md:flex flex-col justify-center p-4 bg-muted/50 rounded-lg">
+              <div className="text-xs font-medium text-muted-foreground mb-2">Macro Split</div>
+              {totalMacroCalories > 0 ? (
+                <>
+                  <div className="flex h-3 rounded-full overflow-hidden mb-2">
+                    <div
+                      className="bg-red-500 transition-all"
+                      style={{ width: `${macroPercents.protein}%` }}
+                    />
+                    <div
+                      className="bg-amber-500 transition-all"
+                      style={{ width: `${macroPercents.carbs}%` }}
+                    />
+                    <div
+                      className="bg-blue-500 transition-all"
+                      style={{ width: `${macroPercents.fat}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-red-500 font-medium">{macroPercents.protein.toFixed(1)}% P</span>
+                    <span className="text-amber-500 font-medium">{macroPercents.carbs.toFixed(1)}% C</span>
+                    <span className="text-blue-500 font-medium">{macroPercents.fat.toFixed(1)}% F</span>
+                  </div>
+                </>
+              ) : (
+                <div className="text-xs text-muted-foreground text-center">No data yet</div>
+              )}
             </div>
           </div>
         </CardContent>

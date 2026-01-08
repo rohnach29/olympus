@@ -386,6 +386,186 @@ async function getUserProfile() {
 }
 
 // ============================================================================
+// NUTRITION TOOLS
+// ============================================================================
+
+async function getTodaysFoodLog() {
+  const timezone = await getUserTimezone();
+  const todayDateStr = new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(new Date());
+
+  const logs = await sql`
+    SELECT
+      id,
+      food_name,
+      brand,
+      meal_type,
+      serving_quantity,
+      serving_unit,
+      calories,
+      protein_g,
+      carbs_g,
+      fat_g,
+      fiber_g,
+      sugar_g,
+      sodium_mg,
+      logged_at
+    FROM food_logs
+    WHERE user_id = ${USER_ID}
+      AND logged_date = ${todayDateStr}
+    ORDER BY logged_at ASC
+  `;
+
+  // Group by meal type
+  const meals: Record<string, Array<{
+    id: string;
+    name: string;
+    brand: string | null;
+    serving: string;
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  }>> = {
+    breakfast: [],
+    lunch: [],
+    dinner: [],
+    snack: [],
+  };
+
+  let totalCalories = 0;
+  let totalProtein = 0;
+  let totalCarbs = 0;
+  let totalFat = 0;
+
+  for (const log of logs) {
+    const row = log as {
+      id: string;
+      food_name: string;
+      brand: string | null;
+      meal_type: string;
+      serving_quantity: string;
+      serving_unit: string;
+      calories: string;
+      protein_g: string;
+      carbs_g: string;
+      fat_g: string;
+    };
+
+    const mealType = row.meal_type || "snack";
+    const calories = parseFloat(row.calories) || 0;
+    const protein = parseFloat(row.protein_g) || 0;
+    const carbs = parseFloat(row.carbs_g) || 0;
+    const fat = parseFloat(row.fat_g) || 0;
+
+    if (meals[mealType]) {
+      meals[mealType].push({
+        id: row.id,
+        name: row.food_name,
+        brand: row.brand,
+        serving: `${row.serving_quantity} ${row.serving_unit}`,
+        calories: Math.round(calories),
+        protein: Math.round(protein),
+        carbs: Math.round(carbs),
+        fat: Math.round(fat),
+      });
+    }
+
+    totalCalories += calories;
+    totalProtein += protein;
+    totalCarbs += carbs;
+    totalFat += fat;
+  }
+
+  return {
+    date: todayDateStr,
+    timezone,
+    totals: {
+      calories: Math.round(totalCalories),
+      protein: Math.round(totalProtein),
+      carbs: Math.round(totalCarbs),
+      fat: Math.round(totalFat),
+    },
+    meals,
+  };
+}
+
+interface LogFoodParams {
+  foodName: string;
+  mealType: "breakfast" | "lunch" | "dinner" | "snack";
+  servingDescription: string;
+  calories: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+  fiberG?: number;
+  sugarG?: number;
+  sodiumMg?: number;
+}
+
+async function logFood(params: LogFoodParams) {
+  const timezone = await getUserTimezone();
+  const todayDateStr = new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(new Date());
+
+  // Parse serving description (e.g., "1 medium apple" -> quantity: 1, unit: "medium apple")
+  const servingMatch = params.servingDescription.match(/^([\d.]+)\s*(.+)$/);
+  const servingQuantity = servingMatch ? servingMatch[1] : "1";
+  const servingUnit = servingMatch ? servingMatch[2] : params.servingDescription;
+
+  // Insert the food log
+  const result = await sql`
+    INSERT INTO food_logs (
+      user_id,
+      food_name,
+      meal_type,
+      serving_quantity,
+      serving_unit,
+      serving_size,
+      calories,
+      protein_g,
+      carbs_g,
+      fat_g,
+      fiber_g,
+      sugar_g,
+      sodium_mg,
+      logged_date,
+      logged_at
+    ) VALUES (
+      ${USER_ID},
+      ${params.foodName},
+      ${params.mealType},
+      ${servingQuantity},
+      ${servingUnit},
+      100,
+      ${params.calories},
+      ${params.proteinG},
+      ${params.carbsG},
+      ${params.fatG},
+      ${params.fiberG || 0},
+      ${params.sugarG || 0},
+      ${params.sodiumMg || 0},
+      ${todayDateStr},
+      NOW()
+    )
+    RETURNING id
+  `;
+
+  return {
+    success: true,
+    message: `Logged ${params.foodName} to ${params.mealType}`,
+    logId: (result[0] as { id: string }).id,
+    logged: {
+      food: params.foodName,
+      meal: params.mealType,
+      serving: params.servingDescription,
+      calories: params.calories,
+      protein: params.proteinG,
+      carbs: params.carbsG,
+      fat: params.fatG,
+    },
+  };
+}
+
+// ============================================================================
 // MCP SERVER SETUP
 // This is the boilerplate that connects everything to Claude
 // ============================================================================
@@ -478,6 +658,66 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: [],
         },
       },
+      {
+        name: "get_todays_food_log",
+        description: "Get everything the user has eaten today, grouped by meal (breakfast, lunch, dinner, snacks) with calories and macros.",
+        inputSchema: {
+          type: "object",
+          properties: {},
+          required: [],
+        },
+      },
+      {
+        name: "log_food",
+        description: "Log a food item that the user has eaten. Use your knowledge to estimate nutritional values. The user will describe what they ate, and you should provide the food name, meal type, serving size, and estimated macros.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            foodName: {
+              type: "string",
+              description: "Name of the food (e.g., 'Grilled Chicken Breast', 'Medium Apple', 'Caesar Salad')",
+            },
+            mealType: {
+              type: "string",
+              enum: ["breakfast", "lunch", "dinner", "snack"],
+              description: "Which meal this food belongs to",
+            },
+            servingDescription: {
+              type: "string",
+              description: "Serving size description (e.g., '1 medium', '200g', '1 cup', '1 slice')",
+            },
+            calories: {
+              type: "number",
+              description: "Estimated calories",
+            },
+            proteinG: {
+              type: "number",
+              description: "Estimated protein in grams",
+            },
+            carbsG: {
+              type: "number",
+              description: "Estimated carbohydrates in grams",
+            },
+            fatG: {
+              type: "number",
+              description: "Estimated fat in grams",
+            },
+            fiberG: {
+              type: "number",
+              description: "Estimated fiber in grams (optional)",
+            },
+            sugarG: {
+              type: "number",
+              description: "Estimated sugar in grams (optional)",
+            },
+            sodiumMg: {
+              type: "number",
+              description: "Estimated sodium in mg (optional)",
+            },
+          },
+          required: ["foodName", "mealType", "servingDescription", "calories", "proteinG", "carbsG", "fatG"],
+        },
+      },
     ],
   };
 });
@@ -507,6 +747,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case "get_user_profile":
         result = await getUserProfile();
+        break;
+      case "get_todays_food_log":
+        result = await getTodaysFoodLog();
+        break;
+      case "log_food":
+        result = await logFood(args as unknown as LogFoodParams);
         break;
       default:
         throw new Error(`Unknown tool: ${name}`);
