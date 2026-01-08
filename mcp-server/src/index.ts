@@ -493,13 +493,23 @@ interface LogFoodParams {
   foodName: string;
   mealType: "breakfast" | "lunch" | "dinner" | "snack";
   servingDescription: string;
+  // Macros
   calories: number;
   proteinG: number;
   carbsG: number;
   fatG: number;
   fiberG?: number;
   sugarG?: number;
+  saturatedFatG?: number;
+  // Micros
   sodiumMg?: number;
+  cholesterolMg?: number;
+  vitaminAMcg?: number;
+  vitaminCMg?: number;
+  vitaminDMcg?: number;
+  calciumMg?: number;
+  ironMg?: number;
+  potassiumMg?: number;
 }
 
 async function logFood(params: LogFoodParams) {
@@ -526,7 +536,15 @@ async function logFood(params: LogFoodParams) {
       fat_g,
       fiber_g,
       sugar_g,
+      saturated_fat_g,
       sodium_mg,
+      cholesterol_mg,
+      vitamin_a_mcg,
+      vitamin_c_mg,
+      vitamin_d_mcg,
+      calcium_mg,
+      iron_mg,
+      potassium_mg,
       logged_date,
       logged_at
     ) VALUES (
@@ -542,7 +560,15 @@ async function logFood(params: LogFoodParams) {
       ${params.fatG},
       ${params.fiberG || 0},
       ${params.sugarG || 0},
+      ${params.saturatedFatG || 0},
       ${params.sodiumMg || 0},
+      ${params.cholesterolMg || 0},
+      ${params.vitaminAMcg || 0},
+      ${params.vitaminCMg || 0},
+      ${params.vitaminDMcg || 0},
+      ${params.calciumMg || 0},
+      ${params.ironMg || 0},
+      ${params.potassiumMg || 0},
       ${todayDateStr},
       NOW()
     )
@@ -562,6 +588,134 @@ async function logFood(params: LogFoodParams) {
       carbs: params.carbsG,
       fat: params.fatG,
     },
+  };
+}
+
+async function searchFoods(query: string, limit: number = 10) {
+  const searchPattern = '%' + query.toLowerCase() + '%';
+
+  const foods = await sql`
+    SELECT
+      id,
+      name,
+      brand,
+      category,
+      serving_size,
+      serving_unit,
+      calories,
+      protein_g,
+      carbs_g,
+      fat_g,
+      fiber_g,
+      sugar_g,
+      saturated_fat_g,
+      sodium_mg,
+      cholesterol_mg,
+      vitamin_a_mcg,
+      vitamin_c_mg,
+      vitamin_d_mcg,
+      calcium_mg,
+      iron_mg,
+      potassium_mg
+    FROM foods
+    WHERE LOWER(name) LIKE ${searchPattern}
+    ORDER BY
+      CASE WHEN LOWER(name) = ${query.toLowerCase()} THEN 0
+           WHEN LOWER(name) LIKE ${query.toLowerCase() + '%'} THEN 1
+           ELSE 2 END,
+      LENGTH(name)
+    LIMIT ${limit}
+  `;
+
+  if (foods.length === 0) {
+    return {
+      message: "No foods found matching your search. You can still log with estimated values.",
+      foods: []
+    };
+  }
+
+  return {
+    query,
+    count: foods.length,
+    foods: foods.map(f => {
+      const food = f as {
+        id: string;
+        name: string;
+        brand: string | null;
+        category: string | null;
+        serving_size: string;
+        serving_unit: string;
+        calories: string;
+        protein_g: string;
+        carbs_g: string;
+        fat_g: string;
+        fiber_g: string | null;
+        sugar_g: string | null;
+        saturated_fat_g: string | null;
+        sodium_mg: string | null;
+        cholesterol_mg: string | null;
+        vitamin_a_mcg: string | null;
+        vitamin_c_mg: string | null;
+        vitamin_d_mcg: string | null;
+        calcium_mg: string | null;
+        iron_mg: string | null;
+        potassium_mg: string | null;
+      };
+      const parseNum = (val: string | null) => val ? Math.round(parseFloat(val) * 10) / 10 : null;
+      return {
+        id: food.id,
+        name: food.name,
+        brand: food.brand,
+        category: food.category,
+        servingSize: `${food.serving_size}${food.serving_unit}`,
+        per100g: {
+          calories: Math.round(parseFloat(food.calories)),
+          proteinG: parseNum(food.protein_g),
+          carbsG: parseNum(food.carbs_g),
+          fatG: parseNum(food.fat_g),
+          fiberG: parseNum(food.fiber_g),
+          sugarG: parseNum(food.sugar_g),
+          saturatedFatG: parseNum(food.saturated_fat_g),
+          sodiumMg: parseNum(food.sodium_mg),
+          cholesterolMg: parseNum(food.cholesterol_mg),
+          vitaminAMcg: parseNum(food.vitamin_a_mcg),
+          vitaminCMg: parseNum(food.vitamin_c_mg),
+          vitaminDMcg: parseNum(food.vitamin_d_mcg),
+          calciumMg: parseNum(food.calcium_mg),
+          ironMg: parseNum(food.iron_mg),
+          potassiumMg: parseNum(food.potassium_mg),
+        },
+      };
+    }),
+  };
+}
+
+async function getFoodPortions(foodId: string) {
+  const portions = await sql`
+    SELECT portion_name, gram_weight, is_default
+    FROM food_portions
+    WHERE food_id = ${foodId}
+    ORDER BY is_default DESC, gram_weight ASC
+  `;
+
+  if (portions.length === 0) {
+    return {
+      foodId,
+      message: "No portion data available. Use gram weight.",
+      portions: [{ name: "100g", grams: 100 }]
+    };
+  }
+
+  return {
+    foodId,
+    portions: portions.map(p => {
+      const portion = p as { portion_name: string; gram_weight: string; is_default: boolean };
+      return {
+        name: portion.portion_name,
+        grams: Math.round(parseFloat(portion.gram_weight)),
+        isDefault: portion.is_default,
+      };
+    }),
   };
 }
 
@@ -669,7 +823,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "log_food",
-        description: "Log a food item that the user has eaten. Use your knowledge to estimate nutritional values. The user will describe what they ate, and you should provide the food name, meal type, serving size, and estimated macros.",
+        description: "Log a food item that the user has eaten. First try search_foods to find accurate USDA data. If not found, use your knowledge to estimate nutritional values.",
         inputSchema: {
           type: "object",
           properties: {
@@ -688,34 +842,99 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             calories: {
               type: "number",
-              description: "Estimated calories",
+              description: "Calories (from USDA or estimated)",
             },
             proteinG: {
               type: "number",
-              description: "Estimated protein in grams",
+              description: "Protein in grams",
             },
             carbsG: {
               type: "number",
-              description: "Estimated carbohydrates in grams",
+              description: "Carbohydrates in grams",
             },
             fatG: {
               type: "number",
-              description: "Estimated fat in grams",
+              description: "Fat in grams",
             },
             fiberG: {
               type: "number",
-              description: "Estimated fiber in grams (optional)",
+              description: "Fiber in grams (optional)",
             },
             sugarG: {
               type: "number",
-              description: "Estimated sugar in grams (optional)",
+              description: "Sugar in grams (optional)",
+            },
+            saturatedFatG: {
+              type: "number",
+              description: "Saturated fat in grams (optional)",
             },
             sodiumMg: {
               type: "number",
-              description: "Estimated sodium in mg (optional)",
+              description: "Sodium in mg (optional)",
+            },
+            cholesterolMg: {
+              type: "number",
+              description: "Cholesterol in mg (optional)",
+            },
+            vitaminAMcg: {
+              type: "number",
+              description: "Vitamin A in mcg (optional)",
+            },
+            vitaminCMg: {
+              type: "number",
+              description: "Vitamin C in mg (optional)",
+            },
+            vitaminDMcg: {
+              type: "number",
+              description: "Vitamin D in mcg (optional)",
+            },
+            calciumMg: {
+              type: "number",
+              description: "Calcium in mg (optional)",
+            },
+            ironMg: {
+              type: "number",
+              description: "Iron in mg (optional)",
+            },
+            potassiumMg: {
+              type: "number",
+              description: "Potassium in mg (optional)",
             },
           },
           required: ["foodName", "mealType", "servingDescription", "calories", "proteinG", "carbsG", "fatG"],
+        },
+      },
+      {
+        name: "search_foods",
+        description: "Search the USDA food database for nutritional information. Use this before logging food to get accurate macro/micro data. Returns nutritional values per 100g.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "Food name to search for (e.g., 'chicken breast', 'apple', 'brown rice')",
+            },
+            limit: {
+              type: "number",
+              description: "Max results to return (default: 10)",
+              default: 10,
+            },
+          },
+          required: ["query"],
+        },
+      },
+      {
+        name: "get_food_portions",
+        description: "Get available serving sizes for a food (e.g., '1 medium apple = 182g'). Use after search_foods to find portion sizes.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            foodId: {
+              type: "string",
+              description: "Food ID from search_foods results",
+            },
+          },
+          required: ["foodId"],
         },
       },
     ],
@@ -753,6 +972,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case "log_food":
         result = await logFood(args as unknown as LogFoodParams);
+        break;
+      case "search_foods":
+        result = await searchFoods((args?.query as string) || "", (args?.limit as number) || 10);
+        break;
+      case "get_food_portions":
+        result = await getFoodPortions(args?.foodId as string);
         break;
       default:
         throw new Error(`Unknown tool: ${name}`);
