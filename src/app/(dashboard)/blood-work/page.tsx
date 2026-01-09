@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useState, useEffect, useCallback } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,11 +15,12 @@ import {
   Plus,
   Loader2,
   Trash2,
-  Calendar,
   FileText,
   Keyboard,
   Pencil,
   Check,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 interface Marker {
@@ -44,13 +45,22 @@ interface Summary {
   overallScore: number;
 }
 
-interface BloodWorkResult {
+interface BloodWorkResultSummary {
   id: string;
   testDate: string;
   labName: string | null;
-  markers: Marker[];
   markerCount?: number;
   createdAt: string;
+}
+
+interface BloodWorkResultFull extends BloodWorkResultSummary {
+  markers: Marker[];
+}
+
+interface ExpandedResultData {
+  result: BloodWorkResultFull;
+  summary: Summary;
+  groupedMarkers: Record<string, Marker[]>;
 }
 
 interface Categories {
@@ -139,11 +149,14 @@ export default function BloodWorkPage() {
   const [showModal, setShowModal] = useState(false);
   const [uploadMode, setUploadMode] = useState<"manual" | "pdf">("manual");
 
-  const [results, setResults] = useState<BloodWorkResult[]>([]);
-  const [latest, setLatest] = useState<BloodWorkResult | null>(null);
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [groupedMarkers, setGroupedMarkers] = useState<Record<string, Marker[]> | null>(null);
+  // Results list (minimal data)
+  const [results, setResults] = useState<BloodWorkResultSummary[]>([]);
   const [categories, setCategories] = useState<Categories>({});
+
+  // Expanded result state (accordion - only one at a time)
+  const [expandedResultId, setExpandedResultId] = useState<string | null>(null);
+  const [expandedData, setExpandedData] = useState<ExpandedResultData | null>(null);
+  const [expandLoading, setExpandLoading] = useState(false);
 
   // Form state
   const [formDate, setFormDate] = useState(new Date().toISOString().split("T")[0]);
@@ -156,8 +169,6 @@ export default function BloodWorkPage() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfUploading, setPdfUploading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
-  const [extractedMarkers, setExtractedMarkers] = useState<Array<{ name: string; value: string; unit: string; referenceRange?: string }> | null>(null);
-  const [extractedLabName, setExtractedLabName] = useState<string | null>(null);
 
   // Inline editing state
   const [editingMarker, setEditingMarker] = useState<{
@@ -172,12 +183,8 @@ export default function BloodWorkPage() {
   const [addingMarkerToResult, setAddingMarkerToResult] = useState<string | null>(null);
   const [newMarker, setNewMarker] = useState({ name: "", value: "", unit: "", category: "" });
 
-  // Fetch blood work data
-  useEffect(() => {
-    fetchBloodWork();
-  }, []);
-
-  async function fetchBloodWork() {
+  // Fetch blood work list
+  const fetchBloodWork = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch("/api/blood-work");
@@ -187,17 +194,62 @@ export default function BloodWorkPage() {
       const data = await response.json();
 
       setResults(data.results || []);
-      setLatest(data.latest || null);
-      setSummary(data.summary || null);
-      setGroupedMarkers(data.groupedMarkers || null);
       setCategories(data.categories || {});
+
+      // Auto-expand the most recent result if we have results
+      if (data.results && data.results.length > 0 && !expandedResultId) {
+        const latestId = data.results[0].id;
+        // Fetch full data for the latest result
+        await fetchResultDetails(latestId);
+      }
     } catch (err) {
       console.error("Error fetching blood work:", err);
       setError("Failed to load blood work data");
     } finally {
       setLoading(false);
     }
+  }, [expandedResultId]);
+
+  // Fetch full details for a specific result
+  async function fetchResultDetails(id: string) {
+    try {
+      setExpandLoading(true);
+      const response = await fetch(`/api/blood-work?id=${id}`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch result details");
+      }
+      const data = await response.json();
+
+      setExpandedResultId(id);
+      setExpandedData({
+        result: data.result,
+        summary: data.summary,
+        groupedMarkers: data.groupedMarkers,
+      });
+    } catch (err) {
+      console.error("Error fetching result details:", err);
+      setError("Failed to load result details");
+    } finally {
+      setExpandLoading(false);
+    }
   }
+
+  // Toggle expand/collapse a result
+  async function toggleExpand(id: string) {
+    if (expandedResultId === id) {
+      // Collapse
+      setExpandedResultId(null);
+      setExpandedData(null);
+    } else {
+      // Expand (will collapse any other)
+      await fetchResultDetails(id);
+    }
+  }
+
+  // Fetch on mount
+  useEffect(() => {
+    fetchBloodWork();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Add marker row
   function addMarkerRow() {
@@ -265,14 +317,21 @@ export default function BloodWorkPage() {
         throw new Error(data.error || "Failed to save blood work");
       }
 
+      const data = await response.json();
+
       // Reset form and close modal
       setShowModal(false);
-      setFormDate(new Date().toISOString().split("T")[0]);
-      setFormLabName("");
-      setFormMarkers([{ name: "", value: "", unit: "", category: "" }]);
+      resetModalState();
 
-      // Refresh data
+      // Refresh list and expand the new result
+      setExpandedResultId(null);
+      setExpandedData(null);
       await fetchBloodWork();
+
+      // Expand the newly created result
+      if (data.result?.id) {
+        await fetchResultDetails(data.result.id);
+      }
     } catch (err) {
       console.error("Error saving blood work:", err);
       setError(err instanceof Error ? err.message : "Failed to save blood work");
@@ -282,7 +341,8 @@ export default function BloodWorkPage() {
   }
 
   // Delete blood work result
-  async function handleDelete(id: string) {
+  async function handleDelete(id: string, e: React.MouseEvent) {
+    e.stopPropagation(); // Don't toggle expand when deleting
     if (!confirm("Are you sure you want to delete this blood work result?")) return;
 
     try {
@@ -292,6 +352,12 @@ export default function BloodWorkPage() {
 
       if (!response.ok) {
         throw new Error("Failed to delete blood work");
+      }
+
+      // Clear expanded state if we deleted the expanded result
+      if (expandedResultId === id) {
+        setExpandedResultId(null);
+        setExpandedData(null);
       }
 
       await fetchBloodWork();
@@ -315,7 +381,7 @@ export default function BloodWorkPage() {
 
   // Save edited marker value
   async function handleSaveEdit() {
-    if (!editingMarker || !latest) return;
+    if (!editingMarker || !expandedData) return;
 
     const newValue = parseFloat(editValue);
     if (isNaN(newValue)) {
@@ -328,7 +394,7 @@ export default function BloodWorkPage() {
 
     try {
       // Get current markers and update the edited one
-      const currentMarkers = (latest.markers || []).map((m, idx) => ({
+      const currentMarkers = (expandedData.result.markers || []).map((m, idx) => ({
         name: m.name,
         value: idx === editingMarker.markerIndex ? newValue : m.value,
         unit: m.unit,
@@ -347,7 +413,14 @@ export default function BloodWorkPage() {
       }
 
       cancelEdit();
-      await fetchBloodWork();
+      // Refresh the expanded result
+      await fetchResultDetails(editingMarker.resultId);
+      // Also refresh the list to update marker counts
+      const listResponse = await fetch("/api/blood-work");
+      if (listResponse.ok) {
+        const listData = await listResponse.json();
+        setResults(listData.results || []);
+      }
     } catch (err) {
       console.error("Error updating marker:", err);
       setError(err instanceof Error ? err.message : "Failed to update marker");
@@ -358,7 +431,7 @@ export default function BloodWorkPage() {
 
   // Add new marker to existing result
   async function handleAddMarkerToResult() {
-    if (!addingMarkerToResult || !latest) return;
+    if (!addingMarkerToResult || !expandedData) return;
 
     // Validate
     if (!newMarker.name || !newMarker.value || !newMarker.unit) {
@@ -377,7 +450,7 @@ export default function BloodWorkPage() {
 
     try {
       // Get current markers and add new one
-      const currentMarkers = (latest.markers || []).map((m) => ({
+      const currentMarkers = (expandedData.result.markers || []).map((m) => ({
         name: m.name,
         value: m.value,
         unit: m.unit,
@@ -405,7 +478,14 @@ export default function BloodWorkPage() {
       // Reset state
       setAddingMarkerToResult(null);
       setNewMarker({ name: "", value: "", unit: "", category: "" });
-      await fetchBloodWork();
+      // Refresh the expanded result
+      await fetchResultDetails(addingMarkerToResult);
+      // Also refresh the list to update marker counts
+      const listResponse = await fetch("/api/blood-work");
+      if (listResponse.ok) {
+        const listData = await listResponse.json();
+        setResults(listData.results || []);
+      }
     } catch (err) {
       console.error("Error adding marker:", err);
       setError(err instanceof Error ? err.message : "Failed to add marker");
@@ -428,7 +508,6 @@ export default function BloodWorkPage() {
       }
       setPdfFile(file);
       setPdfError(null);
-      setExtractedMarkers(null);
     }
   }
 
@@ -455,21 +534,19 @@ export default function BloodWorkPage() {
         throw new Error(data.error || "Failed to process PDF");
       }
 
-      // Success - show extracted markers for review
-      setExtractedMarkers(
-        data.result.markers.map((m: Marker) => ({
-          name: m.name,
-          value: String(m.value),
-          unit: m.unit,
-          referenceRange: m.referenceMin && m.referenceMax ? `${m.referenceMin}-${m.referenceMax}` : undefined,
-        }))
-      );
-      setExtractedLabName(data.labName || null);
-
-      // Close modal and refresh - data already saved
+      // Close modal and refresh
       setShowModal(false);
       resetModalState();
+
+      // Clear current expansion and refresh
+      setExpandedResultId(null);
+      setExpandedData(null);
       await fetchBloodWork();
+
+      // Expand the newly created result
+      if (data.result?.id) {
+        await fetchResultDetails(data.result.id);
+      }
     } catch (err) {
       console.error("PDF upload error:", err);
       setPdfError(err instanceof Error ? err.message : "Failed to process PDF");
@@ -486,8 +563,6 @@ export default function BloodWorkPage() {
     setFormMarkers([{ name: "", value: "", unit: "", category: "" }]);
     setPdfFile(null);
     setPdfError(null);
-    setExtractedMarkers(null);
-    setExtractedLabName(null);
   }
 
   if (loading) {
@@ -498,7 +573,7 @@ export default function BloodWorkPage() {
     );
   }
 
-  const hasData = latest && latest.markers && latest.markers.length > 0;
+  const hasData = results.length > 0;
 
   return (
     <div className="space-y-6">
@@ -516,8 +591,11 @@ export default function BloodWorkPage() {
 
       {/* Error Message */}
       {error && (
-        <div className="p-4 rounded-lg bg-destructive/10 text-destructive text-sm">
-          {error}
+        <div className="p-4 rounded-lg bg-destructive/10 text-destructive text-sm flex items-center justify-between">
+          <span>{error}</span>
+          <Button variant="ghost" size="sm" onClick={() => setError(null)}>
+            <X className="h-4 w-4" />
+          </Button>
         </div>
       )}
 
@@ -538,258 +616,253 @@ export default function BloodWorkPage() {
         </Card>
       )}
 
-      {/* Summary Card */}
-      {hasData && summary && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FlaskConical className="h-5 w-5 text-primary" />
-              Latest Results Summary
-            </CardTitle>
-            <CardDescription>
-              Test Date: {new Date(latest.testDate).toLocaleDateString()}
-              {latest.labName && ` | Lab: ${latest.labName}`}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              <div className="text-center p-4 bg-green-50 dark:bg-green-950/30 rounded-lg">
-                <div className="text-3xl font-bold text-green-600">{summary.optimal}</div>
-                <div className="text-sm text-muted-foreground">Optimal</div>
-              </div>
-              <div className="text-center p-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
-                <div className="text-3xl font-bold text-blue-600">{summary.normal}</div>
-                <div className="text-sm text-muted-foreground">Normal</div>
-              </div>
-              <div className="text-center p-4 bg-yellow-50 dark:bg-yellow-950/30 rounded-lg">
-                <div className="text-3xl font-bold text-yellow-600">{summary.warning}</div>
-                <div className="text-sm text-muted-foreground">Attention</div>
-              </div>
-              <div className="text-center p-4 bg-red-50 dark:bg-red-950/30 rounded-lg">
-                <div className="text-3xl font-bold text-red-600">{summary.critical}</div>
-                <div className="text-sm text-muted-foreground">Critical</div>
-              </div>
-              <div className="text-center p-4 bg-primary/10 rounded-lg">
-                <div className="text-3xl font-bold text-primary">{summary.overallScore}%</div>
-                <div className="text-sm text-muted-foreground">Score</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Results List - Expandable Accordion */}
+      {hasData && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <FlaskConical className="h-5 w-5 text-primary" />
+            Your Results
+          </h2>
 
-      {/* Biomarker Categories */}
-      {hasData && groupedMarkers && latest && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {Object.entries(groupedMarkers).map(([categoryKey, markers]) => {
-            // Find actual indices in the full markers array for this category
-            const categoryMarkerIndices = latest.markers
-              .map((m, idx) => ({ marker: m, idx }))
-              .filter((item) => item.marker.category === categoryKey);
+          {results.map((result) => {
+            const isExpanded = expandedResultId === result.id;
+            const isLoadingThis = expandLoading && expandedResultId === result.id;
 
             return (
-              <Card key={categoryKey}>
-                <CardHeader>
-                  <CardTitle className="text-lg">
-                    {categories[categoryKey] || categoryKey}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {markers.map((marker, displayIdx) => {
-                      // Get actual index in the markers array
-                      const actualIdx = categoryMarkerIndices[displayIdx]?.idx ?? displayIdx;
-                      const isEditing = editingMarker?.resultId === latest.id && editingMarker?.markerIndex === actualIdx;
-
-                      return (
-                        <div
-                          key={`${marker.name}-${actualIdx}`}
-                          className={`flex items-center justify-between p-3 rounded-lg ${getStatusBgColor(marker.status)}`}
-                        >
-                          <div className="flex items-center gap-3">
-                            {getStatusIcon(marker.status)}
-                            <div>
-                              <div className="font-medium">{marker.name}</div>
-                              <div className="text-xs text-muted-foreground">
-                                Range: {formatRange(marker)}
-                              </div>
-                              {marker.statusMessage && (
-                                <div className="text-xs text-muted-foreground">
-                                  {marker.statusMessage}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {isEditing ? (
-                              // Inline edit form
-                              <>
-                                <Input
-                                  type="number"
-                                  step="any"
-                                  value={editValue}
-                                  onChange={(e) => setEditValue(e.target.value)}
-                                  className="w-20 h-8 text-sm"
-                                  autoFocus
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") handleSaveEdit();
-                                    if (e.key === "Escape") cancelEdit();
-                                  }}
-                                />
-                                <span className="text-xs text-muted-foreground">{marker.unit}</span>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0"
-                                  onClick={handleSaveEdit}
-                                  disabled={editSaving}
-                                >
-                                  {editSaving ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <Check className="h-4 w-4 text-green-600" />
-                                  )}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0"
-                                  onClick={cancelEdit}
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </>
-                            ) : (
-                              // Display mode
-                              <>
-                                <div className="text-right">
-                                  <div className={`font-semibold ${getStatusColor(marker.status)}`}>
-                                    {marker.value} {marker.unit}
-                                  </div>
-                                </div>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0 opacity-50 hover:opacity-100"
-                                  onClick={() => startEditMarker(latest.id, actualIdx, marker)}
-                                >
-                                  <Pencil className="h-3 w-3" />
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Add Marker Button */}
-                  {addingMarkerToResult === latest.id ? (
-                    <div className="mt-4 p-3 border rounded-lg space-y-3">
-                      <div className="flex gap-2">
-                        <Input
-                          placeholder="Marker name"
-                          value={newMarker.name}
-                          onChange={(e) => setNewMarker({ ...newMarker, name: e.target.value })}
-                          className="flex-1"
-                        />
-                        <Input
-                          type="number"
-                          step="any"
-                          placeholder="Value"
-                          value={newMarker.value}
-                          onChange={(e) => setNewMarker({ ...newMarker, value: e.target.value })}
-                          className="w-24"
-                        />
-                        <Input
-                          placeholder="Unit"
-                          value={newMarker.unit}
-                          onChange={(e) => setNewMarker({ ...newMarker, unit: e.target.value })}
-                          className="w-24"
-                        />
-                      </div>
-                      <div className="flex gap-2 justify-end">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            setAddingMarkerToResult(null);
-                            setNewMarker({ name: "", value: "", unit: "", category: "" });
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={handleAddMarkerToResult}
-                          disabled={editSaving}
-                        >
-                          {editSaving ? (
-                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                          ) : (
-                            <Plus className="h-4 w-4 mr-1" />
-                          )}
-                          Add
-                        </Button>
+              <Card key={result.id} className={isExpanded ? "ring-2 ring-primary/20" : ""}>
+                {/* Collapsed Header - Always visible */}
+                <CardHeader
+                  className="cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => toggleExpand(result.id)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div>
+                        <CardTitle className="text-base">
+                          {new Date(result.testDate).toLocaleDateString("en-US", {
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                          })}
+                        </CardTitle>
+                        <p className="text-sm text-muted-foreground">
+                          {result.markerCount || 0} markers
+                          {result.labName && ` • ${result.labName}`}
+                        </p>
                       </div>
                     </div>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full mt-4"
-                      onClick={() => {
-                        setAddingMarkerToResult(latest.id);
-                        setNewMarker({ ...newMarker, category: categoryKey });
-                      }}
-                    >
-                      <Plus className="h-4 w-4 mr-1" /> Add Marker
-                    </Button>
-                  )}
-                </CardContent>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={(e) => handleDelete(result.id, e)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                      >
+                        {isLoadingThis ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : isExpanded ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+
+                {/* Expanded Content */}
+                {isExpanded && expandedData && (
+                  <CardContent className="border-t pt-6">
+                    {/* Summary */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+                      <div className="text-center p-3 bg-green-50 dark:bg-green-950/30 rounded-lg">
+                        <div className="text-2xl font-bold text-green-600">{expandedData.summary.optimal}</div>
+                        <div className="text-xs text-muted-foreground">Optimal</div>
+                      </div>
+                      <div className="text-center p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
+                        <div className="text-2xl font-bold text-blue-600">{expandedData.summary.normal}</div>
+                        <div className="text-xs text-muted-foreground">Normal</div>
+                      </div>
+                      <div className="text-center p-3 bg-yellow-50 dark:bg-yellow-950/30 rounded-lg">
+                        <div className="text-2xl font-bold text-yellow-600">{expandedData.summary.warning}</div>
+                        <div className="text-xs text-muted-foreground">Attention</div>
+                      </div>
+                      <div className="text-center p-3 bg-red-50 dark:bg-red-950/30 rounded-lg">
+                        <div className="text-2xl font-bold text-red-600">{expandedData.summary.critical}</div>
+                        <div className="text-xs text-muted-foreground">Critical</div>
+                      </div>
+                      <div className="text-center p-3 bg-primary/10 rounded-lg">
+                        <div className="text-2xl font-bold text-primary">{expandedData.summary.overallScore}%</div>
+                        <div className="text-xs text-muted-foreground">Score</div>
+                      </div>
+                    </div>
+
+                    {/* Grouped Markers */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {Object.entries(expandedData.groupedMarkers).map(([categoryKey, markers]) => {
+                        // Find actual indices in the full markers array for this category
+                        const categoryMarkerIndices = expandedData.result.markers
+                          .map((m, idx) => ({ marker: m, idx }))
+                          .filter((item) => item.marker.category === categoryKey);
+
+                        return (
+                          <div key={categoryKey} className="border rounded-lg p-4">
+                            <h4 className="font-medium mb-3">{categories[categoryKey] || categoryKey}</h4>
+                            <div className="space-y-2">
+                              {markers.map((marker, displayIdx) => {
+                                const actualIdx = categoryMarkerIndices[displayIdx]?.idx ?? displayIdx;
+                                const isEditing = editingMarker?.resultId === result.id && editingMarker?.markerIndex === actualIdx;
+
+                                return (
+                                  <div
+                                    key={`${marker.name}-${actualIdx}`}
+                                    className={`flex items-center justify-between p-2 rounded-lg ${getStatusBgColor(marker.status)}`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      {getStatusIcon(marker.status)}
+                                      <div>
+                                        <div className="text-sm font-medium">{marker.name}</div>
+                                        <div className="text-xs text-muted-foreground">
+                                          Range: {formatRange(marker)}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {isEditing ? (
+                                        <>
+                                          <Input
+                                            type="number"
+                                            step="any"
+                                            value={editValue}
+                                            onChange={(e) => setEditValue(e.target.value)}
+                                            className="w-20 h-7 text-sm"
+                                            autoFocus
+                                            onKeyDown={(e) => {
+                                              if (e.key === "Enter") handleSaveEdit();
+                                              if (e.key === "Escape") cancelEdit();
+                                            }}
+                                          />
+                                          <span className="text-xs text-muted-foreground">{marker.unit}</span>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-7 w-7 p-0"
+                                            onClick={handleSaveEdit}
+                                            disabled={editSaving}
+                                          >
+                                            {editSaving ? (
+                                              <Loader2 className="h-3 w-3 animate-spin" />
+                                            ) : (
+                                              <Check className="h-3 w-3 text-green-600" />
+                                            )}
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-7 w-7 p-0"
+                                            onClick={cancelEdit}
+                                          >
+                                            <X className="h-3 w-3" />
+                                          </Button>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <div className={`text-sm font-semibold ${getStatusColor(marker.status)}`}>
+                                            {marker.value} {marker.unit}
+                                          </div>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-7 w-7 p-0 opacity-50 hover:opacity-100"
+                                            onClick={() => startEditMarker(result.id, actualIdx, marker)}
+                                          >
+                                            <Pencil className="h-3 w-3" />
+                                          </Button>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Add Marker */}
+                            {addingMarkerToResult === result.id && newMarker.category === categoryKey ? (
+                              <div className="mt-3 p-2 border rounded-lg space-y-2">
+                                <div className="flex gap-2">
+                                  <Input
+                                    placeholder="Name"
+                                    value={newMarker.name}
+                                    onChange={(e) => setNewMarker({ ...newMarker, name: e.target.value })}
+                                    className="flex-1 h-8 text-sm"
+                                  />
+                                  <Input
+                                    type="number"
+                                    step="any"
+                                    placeholder="Value"
+                                    value={newMarker.value}
+                                    onChange={(e) => setNewMarker({ ...newMarker, value: e.target.value })}
+                                    className="w-20 h-8 text-sm"
+                                  />
+                                  <Input
+                                    placeholder="Unit"
+                                    value={newMarker.unit}
+                                    onChange={(e) => setNewMarker({ ...newMarker, unit: e.target.value })}
+                                    className="w-20 h-8 text-sm"
+                                  />
+                                </div>
+                                <div className="flex gap-2 justify-end">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7"
+                                    onClick={() => {
+                                      setAddingMarkerToResult(null);
+                                      setNewMarker({ name: "", value: "", unit: "", category: "" });
+                                    }}
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    className="h-7"
+                                    onClick={handleAddMarkerToResult}
+                                    disabled={editSaving}
+                                  >
+                                    {editSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Add"}
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-full mt-2 h-7 text-xs"
+                                onClick={() => {
+                                  setAddingMarkerToResult(result.id);
+                                  setNewMarker({ name: "", value: "", unit: "", category: categoryKey });
+                                }}
+                              >
+                                <Plus className="h-3 w-3 mr-1" /> Add Marker
+                              </Button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                )}
               </Card>
             );
           })}
         </div>
-      )}
-
-      {/* Previous Results */}
-      {results.length > 1 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              Previous Results
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {results.slice(1).map((result) => (
-                <div
-                  key={result.id}
-                  className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
-                >
-                  <div>
-                    <div className="font-medium">
-                      {new Date(result.testDate).toLocaleDateString()}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {result.markerCount} markers
-                      {result.labName && ` | ${result.labName}`}
-                    </div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDelete(result.id)}
-                  >
-                    <Trash2 className="h-4 w-4 text-muted-foreground" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
       )}
 
       {/* Trends Placeholder */}
@@ -800,10 +873,9 @@ export default function BloodWorkPage() {
               <TrendingUp className="h-5 w-5" />
               Biomarker Trends
             </CardTitle>
-            <CardDescription>Track how your markers change over time</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[200px] flex items-center justify-center text-muted-foreground">
+            <div className="h-[150px] flex items-center justify-center text-muted-foreground">
               <p>Trend charts will appear once you have multiple test results</p>
             </div>
           </CardContent>
@@ -896,7 +968,7 @@ export default function BloodWorkPage() {
                       <p className="text-sm text-destructive">{pdfError}</p>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      We&apos;ll use AI to extract biomarkers from your PDF. Works best with text-based PDFs (not scanned images).
+                      We&apos;ll extract biomarkers from your PDF. Works best with text-based PDFs (not scanned images).
                     </p>
                   </div>
                 </>
