@@ -31,10 +31,12 @@ export async function GET(request: NextRequest) {
     const baselineDate = new Date(todayStart);
     baselineDate.setDate(baselineDate.getDate() - 14);
 
-    // Calculate yesterday's date (sleep from last night has sleepDate = yesterday)
+    // Calculate yesterday's date string in user's timezone
+    // Sleep from last night has sleepDate = yesterday (the night you went to bed)
+    // We need to format in user's timezone, NOT UTC (toISOString would give wrong date)
     const yesterdayDate = new Date(todayStart);
     yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterdayDateStr = yesterdayDate.toISOString().split("T")[0];
+    const yesterdayDateStr = yesterdayDate.toLocaleDateString('en-CA', { timeZone: userTimezone }); // en-CA gives YYYY-MM-DD format
 
     // Fetch sleep sessions for baseline and current data
     const sleepData = await db
