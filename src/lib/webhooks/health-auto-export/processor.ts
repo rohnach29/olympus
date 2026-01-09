@@ -183,13 +183,6 @@ export async function processHealthAutoExport(
     // 3. Process workouts
     for (const workout of workoutsArray) {
       try {
-        // Debug: Log the heart rate data structure to understand format
-        if (workout.heartRateData) {
-          console.log(`[DEBUG] Workout "${workout.name}" heartRateData:`, JSON.stringify(workout.heartRateData).slice(0, 500));
-        } else {
-          console.log(`[DEBUG] Workout "${workout.name}" has no heartRateData field. Available fields:`, Object.keys(workout));
-        }
-
         const mapped = mapWorkoutToOlympus(userId, workout);
 
         // UPSERT: Insert if not exists, do nothing if duplicate

@@ -32,6 +32,16 @@ export interface HAESleepData {
   source?: string;
 }
 
+// Workout heart rate sample (per-minute intervals from Apple Watch)
+export interface HAEHeartRateSample {
+  Avg: number;      // Average HR for this interval
+  Min: number;      // Minimum HR
+  Max: number;      // Maximum HR
+  date: string;     // Timestamp
+  units: string;    // "count/min"
+  source?: string;  // e.g., "Rohan's Apple Watch"
+}
+
 // Workout data
 export interface HAEWorkout {
   id?: string;
@@ -43,10 +53,7 @@ export interface HAEWorkout {
     qty: number;
     units: string;
   };
-  heartRateData?: {
-    qty: number;
-    units: string;
-  }[];
+  heartRateData?: HAEHeartRateSample[];
   source?: string;
 }
 
