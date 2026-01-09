@@ -2,6 +2,167 @@
 
 import { extractText } from "unpdf";
 
+// ============================================================================
+// Name Normalization - Maps common lab report names to our standard names
+// ============================================================================
+const NAME_ALIASES: Record<string, string> = {
+  // Lipids - Indian labs often use full names
+  "LDL Cholesterol": "LDL-C",
+  "LDL-Cholesterol": "LDL-C",
+  "LDL cholesterol": "LDL-C",
+  "HDL Cholesterol": "HDL-C",
+  "HDL-Cholesterol": "HDL-C",
+  "HDL cholesterol": "HDL-C",
+  "Non HDL Cholesterol": "Non-HDL Cholesterol",
+  "Non-HDL cholesterol": "Non-HDL Cholesterol",
+  "VLDL": "VLDL Cholesterol",
+  "VLDL-C": "VLDL Cholesterol",
+
+  // Liver - SGOT/SGPT common in Indian labs
+  "SGOT (AST)": "AST",
+  "SGPT (ALT)": "ALT",
+  "SGOT": "AST",
+  "SGPT": "ALT",
+  "S.G.O.T": "AST",
+  "S.G.P.T": "ALT",
+  "GGTP (Gamma GT)": "GGT",
+  "GGTP": "GGT",
+  "Gamma GT": "GGT",
+  "Gamma-GT": "GGT",
+  "GGT (Gamma GT)": "GGT",
+  "Bilirubin Total": "Bilirubin Total",
+  "Total Bilirubin": "Bilirubin Total",
+  "Bilirubin (Total)": "Bilirubin Total",
+  "Direct Bilirubin": "Bilirubin Direct",
+  "Indirect Bilirubin": "Bilirubin Indirect",
+  "Protein Total": "Total Protein",
+  "Total Proteins": "Total Protein",
+  "Serum Albumin": "Albumin",
+
+  // Thyroid - Various naming conventions
+  "TSH-Ultrasensitive": "TSH",
+  "TSH Ultrasensitive": "TSH",
+  "TSH (Ultrasensitive)": "TSH",
+  "Tri-iodothyronine (T3)": "T3",
+  "Triiodothyronine": "T3",
+  "Total T3": "T3",
+  "Thyroxine (T4)": "T4",
+  "Total T4": "T4",
+  "Free T4 (FT4)": "Free T4",
+  "Free T3 (FT3)": "Free T3",
+
+  // Vitamins - Multiple naming styles
+  "Vitamin D Total-25 Hydroxy": "Vitamin D (25-OH)",
+  "Vitamin D Total": "Vitamin D (25-OH)",
+  "Vitamin D, 25-Hydroxy": "Vitamin D (25-OH)",
+  "25-OH Vitamin D": "Vitamin D (25-OH)",
+  "25 Hydroxy Vitamin D": "Vitamin D (25-OH)",
+  "Vitamin D 25 OH": "Vitamin D (25-OH)",
+  "Vit D3": "Vitamin D (25-OH)",
+  "Vitamin B12 Cyanocobalamin": "Vitamin B12",
+  "Cyanocobalamin": "Vitamin B12",
+  "Vit B12": "Vitamin B12",
+
+  // CBC - British/Indian spelling and full names
+  "Haemoglobin": "Hemoglobin",
+  "Hb": "Hemoglobin",
+  "HGB": "Hemoglobin",
+  "Erythrocytes (RBC)": "RBC",
+  "Erythrocytes": "RBC",
+  "Red Blood Cells": "RBC",
+  "Red Blood Cell Count": "RBC",
+  "Total WBC Count": "WBC",
+  "White Blood Cells": "WBC",
+  "White Blood Cell Count": "WBC",
+  "Leucocytes": "WBC",
+  "Total Leucocyte Count": "WBC",
+  "TLC": "WBC",
+  "Platelet Count": "Platelets",
+  "Thrombocytes": "Platelets",
+  "Hematocrit (HCT)": "Hematocrit",
+  "HCT": "Hematocrit",
+  "Haematocrit": "Hematocrit",
+  "PCV": "Hematocrit",
+  "RDW SD": "RDW",
+  "RDW-SD": "RDW",
+  "RDW CV": "RDW",
+  "RDW-CV": "RDW",
+
+  // Kidney - Various formats
+  "Blood Urea Nitrogen BUN": "BUN",
+  "Blood Urea Nitrogen": "BUN",
+  "Urea Nitrogen": "BUN",
+  "Serum Creatinine": "Creatinine",
+  "S. Creatinine": "Creatinine",
+  "eGFR (CKD-EPI)": "eGFR",
+  "GFR": "eGFR",
+
+  // Iron profile
+  "Serum Iron": "Iron",
+  "S. Iron": "Iron",
+  "Serum Ferritin": "Ferritin",
+  "S. Ferritin": "Ferritin",
+  "Transferrin Saturation %": "Transferrin Saturation",
+  "TSAT": "Transferrin Saturation",
+  "Iron Saturation": "Transferrin Saturation",
+
+  // Metabolic
+  "Fasting Glucose (Plasma)": "Fasting Glucose",
+  "Glucose Fasting": "Fasting Glucose",
+  "Glucose (Fasting)": "Fasting Glucose",
+  "FBS": "Fasting Glucose",
+  "Fasting Blood Sugar": "Fasting Glucose",
+  "HbA1C": "HbA1c",
+  "HBA1C": "HbA1c",
+  "Glycated Hemoglobin": "HbA1c",
+  "Glycosylated Hemoglobin": "HbA1c",
+
+  // Inflammation
+  "Erythrocyte Sedimentation Rate": "ESR",
+  "Erythrocyte Sedimentation Rate (ESR)": "ESR",
+  "hs-CRP": "hs-CRP",
+  "hsCRP": "hs-CRP",
+  "High Sensitivity CRP": "hs-CRP",
+  "C-Reactive Protein": "hs-CRP",
+
+  // Electrolytes
+  "Sodium (Na)": "Sodium",
+  "Na": "Sodium",
+  "Serum Sodium": "Sodium",
+  "Potassium (K)": "Potassium",
+  "K": "Potassium",
+  "Serum Potassium": "Potassium",
+  "Chloride (Cl)": "Chloride",
+  "Cl": "Chloride",
+  "Serum Chloride": "Chloride",
+  "Calcium Total": "Calcium",
+  "Total Calcium": "Calcium",
+  "Serum Calcium": "Calcium",
+  "Ionised Calcium": "Ionized Calcium",
+  "Ca++": "Ionized Calcium",
+};
+
+/**
+ * Normalize marker name using aliases
+ */
+function normalizeMarkerName(name: string): string {
+  // Try exact match first
+  if (NAME_ALIASES[name]) {
+    return NAME_ALIASES[name];
+  }
+
+  // Try case-insensitive match
+  const lowerName = name.toLowerCase();
+  for (const [alias, standardName] of Object.entries(NAME_ALIASES)) {
+    if (alias.toLowerCase() === lowerName) {
+      return standardName;
+    }
+  }
+
+  // Return original name if no alias found
+  return name;
+}
+
 interface ExtractedMarker {
   name: string;
   value: number;
@@ -136,7 +297,7 @@ function parseJSONResponse(response: string): { labName?: string; testDate?: str
   try {
     const parsed = JSON.parse(jsonMatch[0]);
 
-    // Validate and clean markers
+    // Validate and clean markers, applying name normalization
     const markers: ExtractedMarker[] = (parsed.markers || [])
       .filter((m: unknown) => {
         if (typeof m !== "object" || m === null) return false;
@@ -144,7 +305,7 @@ function parseJSONResponse(response: string): { labName?: string; testDate?: str
         return marker.name && typeof marker.value === "number" && marker.unit;
       })
       .map((m: Record<string, unknown>) => ({
-        name: String(m.name),
+        name: normalizeMarkerName(String(m.name)), // Apply normalization
         value: Number(m.value),
         unit: String(m.unit),
         referenceRange: m.referenceRange ? String(m.referenceRange) : undefined,
@@ -163,103 +324,155 @@ function parseJSONResponse(response: string): { labName?: string; testDate?: str
 /**
  * Fallback: Extract common markers using regex patterns
  * Used when LLM is not available
+ * Updated for Indian lab report formats (space/tab separated, British spellings)
  */
 function extractWithRegex(text: string): ExtractedMarker[] {
   const markers: ExtractedMarker[] = [];
   const foundNames = new Set<string>();
 
-  // Normalize text - handle various formats
+  // Normalize text - preserve some structure but clean up excess whitespace
   const normalizedText = text.replace(/\s+/g, " ");
 
-  // Common patterns for lab values - more flexible matching
-  // Format: "Marker Name" followed by a number, then optionally a unit
+  // Pattern separator: handles colon, space, tab, or combinations
+  // Indian labs often use: "Marker Name    Value    Unit    Range"
+  const SEP = "[:\\s]+";
+
+  // Common patterns for lab values - flexible for Indian lab formats
+  // Uses space/tab OR colon as separator
   const patterns: Array<{ regex: RegExp; name: string; unit: string }> = [
+    // ============================================================================
     // Metabolic
-    { regex: /(?:fasting\s+)?glucose[:\s]+(\d+\.?\d*)\s*(?:mg\/dL|mmol\/L)?/i, name: "Fasting Glucose", unit: "mg/dL" },
-    { regex: /hba1c[:\s]+(\d+\.?\d*)\s*%?/i, name: "HbA1c", unit: "%" },
-    { regex: /hemoglobin\s+a1c[:\s]+(\d+\.?\d*)\s*%?/i, name: "HbA1c", unit: "%" },
+    // ============================================================================
+    { regex: new RegExp(`(?:fasting\\s+)?glucose(?:\\s*\\(plasma\\))?${SEP}(\\d+\\.?\\d*)\\s*(?:mg\\/d[lL])?`, "i"), name: "Fasting Glucose", unit: "mg/dL" },
+    { regex: new RegExp(`glucose\\s+fasting${SEP}(\\d+\\.?\\d*)\\s*(?:mg\\/d[lL])?`, "i"), name: "Fasting Glucose", unit: "mg/dL" },
+    { regex: new RegExp(`hba1c${SEP}(\\d+\\.?\\d*)\\s*%?`, "i"), name: "HbA1c", unit: "%" },
+    { regex: new RegExp(`h(?:a)?emoglobin\\s+a1c${SEP}(\\d+\\.?\\d*)\\s*%?`, "i"), name: "HbA1c", unit: "%" },
+    { regex: new RegExp(`glycated\\s+h(?:a)?emoglobin${SEP}(\\d+\\.?\\d*)\\s*%?`, "i"), name: "HbA1c", unit: "%" },
 
+    // ============================================================================
     // Lipids
-    { regex: /(?:total\s+)?cholesterol[:\s]+(\d+\.?\d*)\s*(?:mg\/dL)?/i, name: "Total Cholesterol", unit: "mg/dL" },
-    { regex: /ldl(?:\s+cholesterol)?(?:\s+calc)?[:\s]+(\d+\.?\d*)\s*(?:mg\/dL)?/i, name: "LDL Cholesterol", unit: "mg/dL" },
-    { regex: /hdl(?:\s+cholesterol)?[:\s]+(\d+\.?\d*)\s*(?:mg\/dL)?/i, name: "HDL Cholesterol", unit: "mg/dL" },
-    { regex: /triglycerides?[:\s]+(\d+\.?\d*)\s*(?:mg\/dL)?/i, name: "Triglycerides", unit: "mg/dL" },
+    // ============================================================================
+    { regex: new RegExp(`total\\s+cholesterol${SEP}(\\d+\\.?\\d*)\\s*(?:mg\\/d[lL])?`, "i"), name: "Total Cholesterol", unit: "mg/dL" },
+    { regex: new RegExp(`ldl\\s+cholesterol${SEP}(\\d+\\.?\\d*)\\s*(?:mg\\/d[lL])?`, "i"), name: "LDL Cholesterol", unit: "mg/dL" },
+    { regex: new RegExp(`hdl\\s+cholesterol${SEP}(\\d+\\.?\\d*)\\s*(?:mg\\/d[lL])?`, "i"), name: "HDL Cholesterol", unit: "mg/dL" },
+    { regex: new RegExp(`triglycerides?${SEP}(\\d+\\.?\\d*)\\s*(?:mg\\/d[lL])?`, "i"), name: "Triglycerides", unit: "mg/dL" },
+    { regex: new RegExp(`vldl\\s+cholesterol${SEP}(\\d+\\.?\\d*)\\s*(?:mg\\/d[lL])?`, "i"), name: "VLDL Cholesterol", unit: "mg/dL" },
+    { regex: new RegExp(`non[\\s-]?hdl\\s+cholesterol${SEP}(\\d+\\.?\\d*)\\s*(?:mg\\/d[lL])?`, "i"), name: "Non-HDL Cholesterol", unit: "mg/dL" },
 
+    // ============================================================================
     // Kidney
-    { regex: /creatinine[:\s]+(\d+\.?\d*)\s*(?:mg\/dL)?/i, name: "Creatinine", unit: "mg/dL" },
-    { regex: /bun[:\s]+(\d+\.?\d*)\s*(?:mg\/dL)?/i, name: "BUN", unit: "mg/dL" },
-    { regex: /egfr[:\s]+(\d+\.?\d*)/i, name: "eGFR", unit: "mL/min" },
+    // ============================================================================
+    { regex: new RegExp(`creatinine${SEP}(\\d+\\.?\\d*)\\s*(?:mg\\/d[lL])?`, "i"), name: "Creatinine", unit: "mg/dL" },
+    { regex: new RegExp(`blood\\s+urea\\s+nitrogen\\s*(?:bun)?${SEP}(\\d+\\.?\\d*)\\s*(?:mg\\/d[lL])?`, "i"), name: "BUN", unit: "mg/dL" },
+    { regex: new RegExp(`bun${SEP}(\\d+\\.?\\d*)\\s*(?:mg\\/d[lL])?`, "i"), name: "BUN", unit: "mg/dL" },
+    { regex: new RegExp(`blood\\s+urea${SEP}(\\d+\\.?\\d*)\\s*(?:mg\\/d[lL])?`, "i"), name: "Blood Urea", unit: "mg/dL" },
+    { regex: new RegExp(`uric\\s+acid${SEP}(\\d+\\.?\\d*)\\s*(?:mg\\/d[lL])?`, "i"), name: "Uric Acid", unit: "mg/dL" },
+    { regex: new RegExp(`egfr${SEP}(\\d+\\.?\\d*)`, "i"), name: "eGFR", unit: "mL/min" },
 
+    // ============================================================================
     // Thyroid
-    { regex: /tsh[:\s]+(\d+\.?\d*)\s*(?:mIU\/L|uIU\/mL)?/i, name: "TSH", unit: "mIU/L" },
-    { regex: /(?:free\s+)?t4[:\s]+(\d+\.?\d*)\s*(?:ng\/dL)?/i, name: "Free T4", unit: "ng/dL" },
-    { regex: /(?:free\s+)?t3[:\s]+(\d+\.?\d*)\s*(?:pg\/mL)?/i, name: "Free T3", unit: "pg/mL" },
+    // ============================================================================
+    { regex: new RegExp(`tsh(?:-?ultrasensitive)?${SEP}(\\d+\\.?\\d*)\\s*(?:mIU\\/[lL]|[uμ]IU\\/m[lL])?`, "i"), name: "TSH", unit: "mIU/L" },
+    { regex: new RegExp(`(?:tri-?iodothyronine|total\\s+t3|t3)(?:\\s*\\(t3\\))?${SEP}(\\d+\\.?\\d*)\\s*(?:ng\\/d[lL])?`, "i"), name: "T3", unit: "ng/dL" },
+    { regex: new RegExp(`(?:thyroxine|total\\s+t4|t4)(?:\\s*\\(t4\\))?${SEP}(\\d+\\.?\\d*)\\s*(?:[uμ]g\\/d[lL])?`, "i"), name: "T4", unit: "μg/dL" },
+    { regex: new RegExp(`free\\s+t4${SEP}(\\d+\\.?\\d*)\\s*(?:ng\\/d[lL])?`, "i"), name: "Free T4", unit: "ng/dL" },
+    { regex: new RegExp(`free\\s+t3${SEP}(\\d+\\.?\\d*)\\s*(?:pg\\/m[lL])?`, "i"), name: "Free T3", unit: "pg/mL" },
 
+    // ============================================================================
     // Vitamins
-    { regex: /vitamin\s*d[,:\s]+(?:25-?oh)?[:\s]*(\d+\.?\d*)\s*(?:ng\/mL)?/i, name: "Vitamin D", unit: "ng/mL" },
-    { regex: /(?:vitamin\s+)?b12[:\s]+(\d+\.?\d*)\s*(?:pg\/mL)?/i, name: "Vitamin B12", unit: "pg/mL" },
-    { regex: /folate[:\s]+(\d+\.?\d*)\s*(?:ng\/mL)?/i, name: "Folate", unit: "ng/mL" },
+    // ============================================================================
+    { regex: new RegExp(`vitamin\\s*d[\\s-]*(?:total)?[\\s-]*(?:25)?[\\s-]*(?:hydroxy)?${SEP}(\\d+\\.?\\d*)\\s*(?:ng\\/m[lL])?`, "i"), name: "Vitamin D (25-OH)", unit: "ng/mL" },
+    { regex: new RegExp(`(?:vitamin\\s+)?b12(?:\\s+cyanocobalamin)?${SEP}(\\d+\\.?\\d*)\\s*(?:pg\\/m[lL])?`, "i"), name: "Vitamin B12", unit: "pg/mL" },
+    { regex: new RegExp(`folate${SEP}(\\d+\\.?\\d*)\\s*(?:ng\\/m[lL])?`, "i"), name: "Folate", unit: "ng/mL" },
 
-    // CBC - Complete Blood Count
-    { regex: /(?:wbc|white\s+blood\s+cell(?:s)?(?:\s+count)?)[:\s]+(\d+\.?\d*)\s*(?:K\/uL|10\^3\/uL|x10E3\/uL)?/i, name: "WBC", unit: "K/uL" },
-    { regex: /(?:rbc|red\s+blood\s+cell(?:s)?(?:\s+count)?)[:\s]+(\d+\.?\d*)\s*(?:M\/uL|10\^6\/uL|x10E6\/uL)?/i, name: "RBC", unit: "M/uL" },
-    { regex: /hemoglobin[:\s]+(\d+\.?\d*)\s*(?:g\/dL)?/i, name: "Hemoglobin", unit: "g/dL" },
-    { regex: /hematocrit[:\s]+(\d+\.?\d*)\s*%?/i, name: "Hematocrit", unit: "%" },
-    { regex: /platelets?(?:\s+count)?[:\s]+(\d+\.?\d*)\s*(?:K\/uL|10\^3\/uL)?/i, name: "Platelets", unit: "K/uL" },
-    { regex: /mcv[:\s]+(\d+\.?\d*)\s*(?:fL)?/i, name: "MCV", unit: "fL" },
-    { regex: /mch[:\s]+(\d+\.?\d*)\s*(?:pg)?/i, name: "MCH", unit: "pg" },
-    { regex: /mchc[:\s]+(\d+\.?\d*)\s*(?:g\/dL)?/i, name: "MCHC", unit: "g/dL" },
-    { regex: /rdw[:\s]+(\d+\.?\d*)\s*%?/i, name: "RDW", unit: "%" },
+    // ============================================================================
+    // CBC - Complete Blood Count (with British spellings)
+    // ============================================================================
+    { regex: new RegExp(`h(?:a)?emoglobin${SEP}(\\d+\\.?\\d*)\\s*(?:g\\/d[lL])?`, "i"), name: "Hemoglobin", unit: "g/dL" },
+    { regex: new RegExp(`(?:erythrocytes|rbc)(?:\\s*\\(rbc\\))?${SEP}(\\d+\\.?\\d*)\\s*(?:10\\^6\\/[uμ][lL]|M\\/[uμ][lL])?`, "i"), name: "RBC", unit: "M/μL" },
+    { regex: new RegExp(`(?:h(?:a)?ematocrit|hct)(?:\\s*\\(hct\\))?${SEP}(\\d+\\.?\\d*)\\s*%?`, "i"), name: "Hematocrit", unit: "%" },
+    { regex: new RegExp(`(?:total\\s+wbc\\s+count|wbc|leucocytes?|white\\s+blood\\s+cells?)${SEP}(\\d+\\.?\\d*)\\s*(?:\\/cu\\.?m\\.?m|K?\\/[uμ][lL])?`, "i"), name: "WBC", unit: "K/μL" },
+    { regex: new RegExp(`(?:platelet\\s+count|platelets?|thrombocytes?)${SEP}(\\d+)\\s*(?:\\/cu\\.?m\\.?m|K?\\/[uμ][lL])?`, "i"), name: "Platelets", unit: "K/μL" },
+    { regex: new RegExp(`mcv${SEP}(\\d+\\.?\\d*)\\s*(?:f[lL])?`, "i"), name: "MCV", unit: "fL" },
+    { regex: new RegExp(`mch${SEP}(\\d+\\.?\\d*)\\s*(?:pg)?`, "i"), name: "MCH", unit: "pg" },
+    { regex: new RegExp(`mchc${SEP}(\\d+\\.?\\d*)\\s*(?:g\\/d[lL])?`, "i"), name: "MCHC", unit: "g/dL" },
+    { regex: new RegExp(`rdw(?:[\\s-]?(?:sd|cv))?${SEP}(\\d+\\.?\\d*)\\s*%?`, "i"), name: "RDW", unit: "%" },
 
-    // Differential
-    { regex: /lymphocytes?(?:\s+%)?[:\s]+(\d+\.?\d*)\s*%?/i, name: "Lymphocyte %", unit: "%" },
-    { regex: /neutrophils?(?:\s+%)?[:\s]+(\d+\.?\d*)\s*%?/i, name: "Neutrophil %", unit: "%" },
-    { regex: /monocytes?(?:\s+%)?[:\s]+(\d+\.?\d*)\s*%?/i, name: "Monocyte %", unit: "%" },
+    // ============================================================================
+    // Differential (percentages)
+    // ============================================================================
+    { regex: new RegExp(`neutrophils?${SEP}(\\d+\\.?\\d*)\\s*%`, "i"), name: "Neutrophil %", unit: "%" },
+    { regex: new RegExp(`lymphocytes?${SEP}(\\d+\\.?\\d*)\\s*%`, "i"), name: "Lymphocyte %", unit: "%" },
+    { regex: new RegExp(`monocytes?${SEP}(\\d+\\.?\\d*)\\s*%`, "i"), name: "Monocyte %", unit: "%" },
+    { regex: new RegExp(`eosinophils?${SEP}(\\d+\\.?\\d*)\\s*%`, "i"), name: "Eosinophil %", unit: "%" },
+    { regex: new RegExp(`basophils?${SEP}(\\d+\\.?\\d*)\\s*%`, "i"), name: "Basophil %", unit: "%" },
 
-    // Liver
-    { regex: /alt(?:\s+\(sgpt\))?[:\s]+(\d+\.?\d*)\s*(?:U\/L|IU\/L)?/i, name: "ALT", unit: "U/L" },
-    { regex: /ast(?:\s+\(sgot\))?[:\s]+(\d+\.?\d*)\s*(?:U\/L|IU\/L)?/i, name: "AST", unit: "U/L" },
-    { regex: /(?:alk(?:aline)?\s+phos(?:phatase)?|alp)[:\s]+(\d+\.?\d*)\s*(?:U\/L|IU\/L)?/i, name: "Alkaline Phosphatase", unit: "U/L" },
-    { regex: /(?:total\s+)?bilirubin[:\s]+(\d+\.?\d*)\s*(?:mg\/dL)?/i, name: "Bilirubin", unit: "mg/dL" },
-    { regex: /albumin[:\s]+(\d+\.?\d*)\s*(?:g\/dL)?/i, name: "Albumin", unit: "g/dL" },
-    { regex: /(?:total\s+)?protein[:\s]+(\d+\.?\d*)\s*(?:g\/dL)?/i, name: "Total Protein", unit: "g/dL" },
+    // ============================================================================
+    // Liver (including Indian lab naming: SGOT/SGPT)
+    // ============================================================================
+    { regex: new RegExp(`(?:sgpt|alt)(?:\\s*\\((?:sgpt|alt)\\))?${SEP}(\\d+\\.?\\d*)\\s*(?:U\\/[lL]|IU\\/[lL])?`, "i"), name: "ALT", unit: "U/L" },
+    { regex: new RegExp(`(?:sgot|ast)(?:\\s*\\((?:sgot|ast)\\))?${SEP}(\\d+\\.?\\d*)\\s*(?:U\\/[lL]|IU\\/[lL])?`, "i"), name: "AST", unit: "U/L" },
+    { regex: new RegExp(`(?:alkaline\\s+phosphatase|alp)${SEP}(\\d+\\.?\\d*)\\s*(?:U\\/[lL]|IU\\/[lL])?`, "i"), name: "Alkaline Phosphatase", unit: "U/L" },
+    { regex: new RegExp(`(?:ggtp|gamma\\s*gt|ggt)(?:\\s*\\([^)]*\\))?${SEP}(\\d+\\.?\\d*)\\s*(?:U\\/[lL])?`, "i"), name: "GGT", unit: "U/L" },
+    { regex: new RegExp(`bilirubin\\s+total${SEP}(\\d+\\.?\\d*)\\s*(?:mg\\/d[lL])?`, "i"), name: "Bilirubin Total", unit: "mg/dL" },
+    { regex: new RegExp(`bilirubin\\s+direct${SEP}(\\d+\\.?\\d*)\\s*(?:mg\\/d[lL])?`, "i"), name: "Bilirubin Direct", unit: "mg/dL" },
+    { regex: new RegExp(`bilirubin\\s+indirect${SEP}(\\d+\\.?\\d*)\\s*(?:mg\\/d[lL])?`, "i"), name: "Bilirubin Indirect", unit: "mg/dL" },
+    { regex: new RegExp(`albumin${SEP}(\\d+\\.?\\d*)\\s*(?:g\\/d[lL])?`, "i"), name: "Albumin", unit: "g/dL" },
+    { regex: new RegExp(`(?:total\\s+)?protein(?:\\s+total)?${SEP}(\\d+\\.?\\d*)\\s*(?:g\\/d[lL])?`, "i"), name: "Total Protein", unit: "g/dL" },
+    { regex: new RegExp(`globulin${SEP}(\\d+\\.?\\d*)\\s*(?:g\\/d[lL])?`, "i"), name: "Globulin", unit: "g/dL" },
 
-    // Iron
-    { regex: /ferritin[:\s]+(\d+\.?\d*)\s*(?:ng\/mL)?/i, name: "Ferritin", unit: "ng/mL" },
-    { regex: /(?:serum\s+)?iron[:\s]+(\d+\.?\d*)\s*(?:ug\/dL|mcg\/dL)?/i, name: "Iron", unit: "ug/dL" },
-    { regex: /tibc[:\s]+(\d+\.?\d*)\s*(?:ug\/dL)?/i, name: "TIBC", unit: "ug/dL" },
+    // ============================================================================
+    // Iron Profile
+    // ============================================================================
+    { regex: new RegExp(`ferritin${SEP}(\\d+\\.?\\d*)\\s*(?:ng\\/m[lL])?`, "i"), name: "Ferritin", unit: "ng/mL" },
+    { regex: new RegExp(`(?:serum\\s+)?iron${SEP}(\\d+\\.?\\d*)\\s*(?:[uμ]g\\/d[lL])?`, "i"), name: "Iron", unit: "μg/dL" },
+    { regex: new RegExp(`tibc${SEP}(\\d+\\.?\\d*)\\s*(?:[uμ]g\\/d[lL])?`, "i"), name: "TIBC", unit: "μg/dL" },
+    { regex: new RegExp(`transferrin\\s+saturation${SEP}(\\d+\\.?\\d*)\\s*%?`, "i"), name: "Transferrin Saturation", unit: "%" },
 
+    // ============================================================================
     // Inflammation
-    { regex: /(?:hs-?)?c-?reactive\s+protein[:\s]+(\d+\.?\d*)\s*(?:mg\/L)?/i, name: "hs-CRP", unit: "mg/L" },
-    { regex: /(?:hs-?)?crp[:\s]+(\d+\.?\d*)\s*(?:mg\/L)?/i, name: "hs-CRP", unit: "mg/L" },
-    { regex: /esr[:\s]+(\d+\.?\d*)\s*(?:mm\/hr)?/i, name: "ESR", unit: "mm/hr" },
+    // ============================================================================
+    { regex: new RegExp(`(?:hs-?)?c-?reactive\\s+protein${SEP}(\\d+\\.?\\d*)\\s*(?:mg\\/[lL])?`, "i"), name: "hs-CRP", unit: "mg/L" },
+    { regex: new RegExp(`(?:hs-?)?crp${SEP}(\\d+\\.?\\d*)\\s*(?:mg\\/[lL])?`, "i"), name: "hs-CRP", unit: "mg/L" },
+    { regex: new RegExp(`(?:erythrocyte\\s+sedimentation\\s+rate|esr)(?:\\s*\\(esr\\))?${SEP}(\\d+\\.?\\d*)\\s*(?:mm\\/hr)?`, "i"), name: "ESR", unit: "mm/hr" },
 
+    // ============================================================================
     // Electrolytes
-    { regex: /sodium[:\s]+(\d+\.?\d*)\s*(?:mEq\/L|mmol\/L)?/i, name: "Sodium", unit: "mEq/L" },
-    { regex: /potassium[:\s]+(\d+\.?\d*)\s*(?:mEq\/L|mmol\/L)?/i, name: "Potassium", unit: "mEq/L" },
-    { regex: /chloride[:\s]+(\d+\.?\d*)\s*(?:mEq\/L|mmol\/L)?/i, name: "Chloride", unit: "mEq/L" },
-    { regex: /calcium[:\s]+(\d+\.?\d*)\s*(?:mg\/dL)?/i, name: "Calcium", unit: "mg/dL" },
-    { regex: /magnesium[:\s]+(\d+\.?\d*)\s*(?:mg\/dL)?/i, name: "Magnesium", unit: "mg/dL" },
+    // ============================================================================
+    { regex: new RegExp(`sodium${SEP}(\\d+\\.?\\d*)\\s*(?:mEq\\/[lL]|mmol\\/[lL])?`, "i"), name: "Sodium", unit: "mEq/L" },
+    { regex: new RegExp(`potassium${SEP}(\\d+\\.?\\d*)\\s*(?:mEq\\/[lL]|mmol\\/[lL])?`, "i"), name: "Potassium", unit: "mEq/L" },
+    { regex: new RegExp(`chloride${SEP}(\\d+\\.?\\d*)\\s*(?:mEq\\/[lL]|mmol\\/[lL])?`, "i"), name: "Chloride", unit: "mEq/L" },
+    { regex: new RegExp(`(?:calcium\\s+total|total\\s+calcium|calcium)${SEP}(\\d+\\.?\\d*)\\s*(?:mg\\/d[lL])?`, "i"), name: "Calcium", unit: "mg/dL" },
+    { regex: new RegExp(`(?:ionised|ionized)\\s+calcium${SEP}(\\d+\\.?\\d*)\\s*(?:mmol\\/[lL])?`, "i"), name: "Ionized Calcium", unit: "mmol/L" },
+    { regex: new RegExp(`magnesium${SEP}(\\d+\\.?\\d*)\\s*(?:mg\\/d[lL])?`, "i"), name: "Magnesium", unit: "mg/dL" },
 
+    // ============================================================================
     // Hormones
-    { regex: /testosterone[:\s]+(\d+\.?\d*)\s*(?:ng\/dL)?/i, name: "Testosterone", unit: "ng/dL" },
-    { regex: /estradiol[:\s]+(\d+\.?\d*)\s*(?:pg\/mL)?/i, name: "Estradiol", unit: "pg/mL" },
-    { regex: /cortisol[:\s]+(\d+\.?\d*)\s*(?:ug\/dL)?/i, name: "Cortisol", unit: "ug/dL" },
-    { regex: /insulin[:\s]+(\d+\.?\d*)\s*(?:uIU\/mL)?/i, name: "Insulin", unit: "uIU/mL" },
+    // ============================================================================
+    { regex: new RegExp(`testosterone${SEP}(\\d+\\.?\\d*)\\s*(?:ng\\/d[lL])?`, "i"), name: "Testosterone", unit: "ng/dL" },
+    { regex: new RegExp(`estradiol${SEP}(\\d+\\.?\\d*)\\s*(?:pg\\/m[lL])?`, "i"), name: "Estradiol", unit: "pg/mL" },
+    { regex: new RegExp(`cortisol${SEP}(\\d+\\.?\\d*)\\s*(?:[uμ]g\\/d[lL])?`, "i"), name: "Cortisol", unit: "μg/dL" },
+    { regex: new RegExp(`(?:fasting\\s+)?insulin${SEP}(\\d+\\.?\\d*)\\s*(?:[uμ]IU\\/m[lL])?`, "i"), name: "Insulin", unit: "μIU/mL" },
   ];
 
   for (const pattern of patterns) {
     const match = normalizedText.match(pattern.regex);
-    if (match && !foundNames.has(pattern.name)) {
+    if (match) {
+      // Normalize the marker name
+      const normalizedName = normalizeMarkerName(pattern.name);
+
+      // Skip if we already have this marker
+      if (foundNames.has(normalizedName)) continue;
+
       const value = parseFloat(match[1]);
       // Sanity check - ignore unrealistic values
-      if (!isNaN(value) && value > 0 && value < 100000) {
+      if (!isNaN(value) && value > 0 && value < 1000000) {
         markers.push({
-          name: pattern.name,
+          name: normalizedName,
           value: value,
           unit: pattern.unit,
         });
-        foundNames.add(pattern.name);
+        foundNames.add(normalizedName);
       }
     }
   }

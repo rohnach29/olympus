@@ -56,6 +56,7 @@ export const BIOMARKER_CATEGORIES = {
   kidney: "Kidney Function",
   liver: "Liver Function",
   thyroid: "Thyroid",
+  electrolytes: "Electrolytes",
 } as const;
 
 export type BiomarkerCategory = keyof typeof BIOMARKER_CATEGORIES;
@@ -370,6 +371,247 @@ export const BIOMARKERS: Record<string, BiomarkerDefinition> = {
     optimalRange: { min: 4.0, max: 5.0 },
     description: "Protein made by liver. Marker of liver function and nutrition.",
     higherIsBetter: true,
+  },
+
+  // ============================================================================
+  // Additional CBC Markers (for comprehensive Indian lab panels)
+  // ============================================================================
+  "MCV": {
+    name: "MCV",
+    category: "blood",
+    unit: "fL",
+    referenceRange: { min: 80, max: 100 },
+    optimalRange: { min: 82, max: 98 },
+    description: "Mean Corpuscular Volume. Average red blood cell size.",
+  },
+  "MCH": {
+    name: "MCH",
+    category: "blood",
+    unit: "pg",
+    referenceRange: { min: 27, max: 33 },
+    optimalRange: { min: 28, max: 32 },
+    description: "Mean Corpuscular Hemoglobin. Average hemoglobin per RBC.",
+  },
+  "MCHC": {
+    name: "MCHC",
+    category: "blood",
+    unit: "g/dL",
+    referenceRange: { min: 31, max: 36 },
+    optimalRange: { min: 32, max: 35 },
+    description: "Mean Corpuscular Hemoglobin Concentration. Hemoglobin concentration in RBCs.",
+  },
+  "RDW": {
+    name: "RDW",
+    category: "blood",
+    unit: "%",
+    referenceRange: { max: 14.5 },
+    optimalRange: { max: 13 },
+    description: "Red Cell Distribution Width. Variation in RBC size.",
+  },
+
+  // ============================================================================
+  // Additional Lipid Markers
+  // ============================================================================
+  "VLDL Cholesterol": {
+    name: "VLDL Cholesterol",
+    category: "lipid",
+    unit: "mg/dL",
+    referenceRange: { max: 30 },
+    optimalRange: { max: 20 },
+    description: "Very Low Density Lipoprotein. Carries triglycerides.",
+  },
+  "Non-HDL Cholesterol": {
+    name: "Non-HDL Cholesterol",
+    category: "lipid",
+    unit: "mg/dL",
+    referenceRange: { max: 130 },
+    optimalRange: { max: 100 },
+    description: "Total cholesterol minus HDL. Better predictor than LDL alone.",
+  },
+  "LDL Cholesterol": {
+    name: "LDL Cholesterol",
+    category: "lipid",
+    unit: "mg/dL",
+    referenceRange: { max: 100 },
+    optimalRange: { max: 70 },
+    description: "Low-density lipoprotein. Associated with cardiovascular risk.",
+  },
+  "HDL Cholesterol": {
+    name: "HDL Cholesterol",
+    category: "lipid",
+    unit: "mg/dL",
+    referenceRange: { min: 40 },
+    optimalRange: { min: 60 },
+    description: "High-density lipoprotein. Protective cholesterol.",
+    higherIsBetter: true,
+  },
+
+  // ============================================================================
+  // Thyroid (Total T3/T4 - common in Indian panels)
+  // ============================================================================
+  "T3": {
+    name: "T3",
+    category: "thyroid",
+    unit: "ng/dL",
+    referenceRange: { min: 70, max: 204 },
+    optimalRange: { min: 100, max: 180 },
+    description: "Total Triiodothyronine. Active thyroid hormone.",
+  },
+  "T4": {
+    name: "T4",
+    category: "thyroid",
+    unit: "μg/dL",
+    referenceRange: { min: 4.5, max: 12 },
+    optimalRange: { min: 6, max: 10 },
+    description: "Total Thyroxine. Main thyroid hormone.",
+  },
+
+  // ============================================================================
+  // Additional Kidney Markers
+  // ============================================================================
+  "Uric Acid": {
+    name: "Uric Acid",
+    category: "kidney",
+    unit: "mg/dL",
+    referenceRange: { min: 3.5, max: 7.2 },
+    optimalRange: { min: 4, max: 6 },
+    description: "Metabolic waste product. High levels can cause gout.",
+  },
+  "Blood Urea": {
+    name: "Blood Urea",
+    category: "kidney",
+    unit: "mg/dL",
+    referenceRange: { min: 15, max: 40 },
+    optimalRange: { min: 18, max: 35 },
+    description: "Waste product from protein metabolism. Kidney function marker.",
+  },
+
+  // ============================================================================
+  // Additional Liver Markers
+  // ============================================================================
+  "Bilirubin Total": {
+    name: "Bilirubin Total",
+    category: "liver",
+    unit: "mg/dL",
+    referenceRange: { max: 1.2 },
+    optimalRange: { max: 1.0 },
+    description: "Breakdown product of hemoglobin. Liver function indicator.",
+  },
+  "Bilirubin Direct": {
+    name: "Bilirubin Direct",
+    category: "liver",
+    unit: "mg/dL",
+    referenceRange: { max: 0.3 },
+    optimalRange: { max: 0.2 },
+    description: "Conjugated bilirubin. Indicates bile duct function.",
+  },
+  "Bilirubin Indirect": {
+    name: "Bilirubin Indirect",
+    category: "liver",
+    unit: "mg/dL",
+    referenceRange: { max: 0.8 },
+    optimalRange: { max: 0.6 },
+    description: "Unconjugated bilirubin. Indicates hemolysis or liver uptake issues.",
+  },
+  "Total Protein": {
+    name: "Total Protein",
+    category: "liver",
+    unit: "g/dL",
+    referenceRange: { min: 6.0, max: 8.3 },
+    optimalRange: { min: 6.5, max: 7.5 },
+    description: "Total serum protein. Indicator of liver and kidney function.",
+  },
+  "Globulin": {
+    name: "Globulin",
+    category: "liver",
+    unit: "g/dL",
+    referenceRange: { min: 2.0, max: 4.0 },
+    optimalRange: { min: 2.3, max: 3.5 },
+    description: "Immune proteins. Part of total protein measurement.",
+  },
+  "Alkaline Phosphatase": {
+    name: "Alkaline Phosphatase",
+    category: "liver",
+    unit: "U/L",
+    referenceRange: { min: 44, max: 147 },
+    optimalRange: { min: 50, max: 120 },
+    description: "Enzyme from liver and bone. Elevated in liver or bone disease.",
+  },
+
+  // ============================================================================
+  // Iron Profile Additions
+  // ============================================================================
+  "TIBC": {
+    name: "TIBC",
+    category: "vitamins",
+    unit: "μg/dL",
+    referenceRange: { min: 250, max: 450 },
+    optimalRange: { min: 280, max: 400 },
+    description: "Total Iron Binding Capacity. Measures transferrin availability.",
+  },
+  "Transferrin Saturation": {
+    name: "Transferrin Saturation",
+    category: "vitamins",
+    unit: "%",
+    referenceRange: { min: 20, max: 50 },
+    optimalRange: { min: 25, max: 45 },
+    description: "Percentage of transferrin bound to iron. Iron status indicator.",
+  },
+
+  // ============================================================================
+  // Additional Inflammation Markers
+  // ============================================================================
+  "ESR": {
+    name: "ESR",
+    category: "inflammation",
+    unit: "mm/hr",
+    referenceRange: { max: 20 },
+    optimalRange: { max: 10 },
+    description: "Erythrocyte Sedimentation Rate. Non-specific inflammation marker.",
+  },
+
+  // ============================================================================
+  // Electrolytes
+  // ============================================================================
+  "Sodium": {
+    name: "Sodium",
+    category: "electrolytes",
+    unit: "mEq/L",
+    referenceRange: { min: 136, max: 145 },
+    optimalRange: { min: 138, max: 142 },
+    description: "Essential electrolyte. Regulates fluid balance and nerve function.",
+  },
+  "Potassium": {
+    name: "Potassium",
+    category: "electrolytes",
+    unit: "mEq/L",
+    referenceRange: { min: 3.5, max: 5.0 },
+    optimalRange: { min: 3.8, max: 4.8 },
+    description: "Essential electrolyte. Critical for heart and muscle function.",
+  },
+  "Chloride": {
+    name: "Chloride",
+    category: "electrolytes",
+    unit: "mEq/L",
+    referenceRange: { min: 98, max: 106 },
+    optimalRange: { min: 100, max: 104 },
+    description: "Electrolyte that helps maintain fluid balance and pH.",
+  },
+  "Calcium": {
+    name: "Calcium",
+    category: "electrolytes",
+    unit: "mg/dL",
+    referenceRange: { min: 8.5, max: 10.5 },
+    optimalRange: { min: 9.0, max: 10.0 },
+    description: "Essential mineral for bones, muscles, and nerve function.",
+  },
+  "Ionized Calcium": {
+    name: "Ionized Calcium",
+    category: "electrolytes",
+    unit: "mmol/L",
+    referenceRange: { min: 1.1, max: 1.35 },
+    optimalRange: { min: 1.15, max: 1.3 },
+    description: "Active form of calcium in blood. More accurate than total calcium.",
   },
 };
 

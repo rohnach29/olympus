@@ -18,6 +18,8 @@ import {
   Calendar,
   FileText,
   Keyboard,
+  Pencil,
+  Check,
 } from "lucide-react";
 
 interface Marker {
@@ -157,6 +159,19 @@ export default function BloodWorkPage() {
   const [extractedMarkers, setExtractedMarkers] = useState<Array<{ name: string; value: string; unit: string; referenceRange?: string }> | null>(null);
   const [extractedLabName, setExtractedLabName] = useState<string | null>(null);
 
+  // Inline editing state
+  const [editingMarker, setEditingMarker] = useState<{
+    resultId: string;
+    markerIndex: number;
+    originalName: string;
+  } | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+
+  // Add marker to existing result state
+  const [addingMarkerToResult, setAddingMarkerToResult] = useState<string | null>(null);
+  const [newMarker, setNewMarker] = useState({ name: "", value: "", unit: "", category: "" });
+
   // Fetch blood work data
   useEffect(() => {
     fetchBloodWork();
@@ -283,6 +298,119 @@ export default function BloodWorkPage() {
     } catch (err) {
       console.error("Error deleting blood work:", err);
       setError("Failed to delete blood work result");
+    }
+  }
+
+  // Start editing a marker
+  function startEditMarker(resultId: string, markerIndex: number, marker: Marker) {
+    setEditingMarker({ resultId, markerIndex, originalName: marker.name });
+    setEditValue(String(marker.value));
+  }
+
+  // Cancel editing
+  function cancelEdit() {
+    setEditingMarker(null);
+    setEditValue("");
+  }
+
+  // Save edited marker value
+  async function handleSaveEdit() {
+    if (!editingMarker || !latest) return;
+
+    const newValue = parseFloat(editValue);
+    if (isNaN(newValue)) {
+      setError("Please enter a valid number");
+      return;
+    }
+
+    setEditSaving(true);
+    setError(null);
+
+    try {
+      // Get current markers and update the edited one
+      const currentMarkers = (latest.markers || []).map((m, idx) => ({
+        name: m.name,
+        value: idx === editingMarker.markerIndex ? newValue : m.value,
+        unit: m.unit,
+        category: m.category,
+      }));
+
+      const response = await fetch(`/api/blood-work?id=${editingMarker.resultId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markers: currentMarkers }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to update marker");
+      }
+
+      cancelEdit();
+      await fetchBloodWork();
+    } catch (err) {
+      console.error("Error updating marker:", err);
+      setError(err instanceof Error ? err.message : "Failed to update marker");
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  // Add new marker to existing result
+  async function handleAddMarkerToResult() {
+    if (!addingMarkerToResult || !latest) return;
+
+    // Validate
+    if (!newMarker.name || !newMarker.value || !newMarker.unit) {
+      setError("Please fill in name, value, and unit");
+      return;
+    }
+
+    const value = parseFloat(newMarker.value);
+    if (isNaN(value)) {
+      setError("Please enter a valid number for value");
+      return;
+    }
+
+    setEditSaving(true);
+    setError(null);
+
+    try {
+      // Get current markers and add new one
+      const currentMarkers = (latest.markers || []).map((m) => ({
+        name: m.name,
+        value: m.value,
+        unit: m.unit,
+        category: m.category,
+      }));
+
+      currentMarkers.push({
+        name: newMarker.name,
+        value,
+        unit: newMarker.unit,
+        category: newMarker.category || "other",
+      });
+
+      const response = await fetch(`/api/blood-work?id=${addingMarkerToResult}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markers: currentMarkers }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to add marker");
+      }
+
+      // Reset state
+      setAddingMarkerToResult(null);
+      setNewMarker({ name: "", value: "", unit: "", category: "" });
+      await fetchBloodWork();
+    } catch (err) {
+      console.error("Error adding marker:", err);
+      setError(err instanceof Error ? err.message : "Failed to add marker");
+    } finally {
+      setEditSaving(false);
     }
   }
 
@@ -451,47 +579,177 @@ export default function BloodWorkPage() {
       )}
 
       {/* Biomarker Categories */}
-      {hasData && groupedMarkers && (
+      {hasData && groupedMarkers && latest && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {Object.entries(groupedMarkers).map(([categoryKey, markers]) => (
-            <Card key={categoryKey}>
-              <CardHeader>
-                <CardTitle className="text-lg">
-                  {categories[categoryKey] || categoryKey}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {markers.map((marker, idx) => (
-                    <div
-                      key={`${marker.name}-${idx}`}
-                      className={`flex items-center justify-between p-3 rounded-lg ${getStatusBgColor(marker.status)}`}
-                    >
-                      <div className="flex items-center gap-3">
-                        {getStatusIcon(marker.status)}
-                        <div>
-                          <div className="font-medium">{marker.name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            Range: {formatRange(marker)}
-                          </div>
-                          {marker.statusMessage && (
-                            <div className="text-xs text-muted-foreground">
-                              {marker.statusMessage}
+          {Object.entries(groupedMarkers).map(([categoryKey, markers]) => {
+            // Find actual indices in the full markers array for this category
+            const categoryMarkerIndices = latest.markers
+              .map((m, idx) => ({ marker: m, idx }))
+              .filter((item) => item.marker.category === categoryKey);
+
+            return (
+              <Card key={categoryKey}>
+                <CardHeader>
+                  <CardTitle className="text-lg">
+                    {categories[categoryKey] || categoryKey}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {markers.map((marker, displayIdx) => {
+                      // Get actual index in the markers array
+                      const actualIdx = categoryMarkerIndices[displayIdx]?.idx ?? displayIdx;
+                      const isEditing = editingMarker?.resultId === latest.id && editingMarker?.markerIndex === actualIdx;
+
+                      return (
+                        <div
+                          key={`${marker.name}-${actualIdx}`}
+                          className={`flex items-center justify-between p-3 rounded-lg ${getStatusBgColor(marker.status)}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            {getStatusIcon(marker.status)}
+                            <div>
+                              <div className="font-medium">{marker.name}</div>
+                              <div className="text-xs text-muted-foreground">
+                                Range: {formatRange(marker)}
+                              </div>
+                              {marker.statusMessage && (
+                                <div className="text-xs text-muted-foreground">
+                                  {marker.statusMessage}
+                                </div>
+                              )}
                             </div>
-                          )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {isEditing ? (
+                              // Inline edit form
+                              <>
+                                <Input
+                                  type="number"
+                                  step="any"
+                                  value={editValue}
+                                  onChange={(e) => setEditValue(e.target.value)}
+                                  className="w-20 h-8 text-sm"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") handleSaveEdit();
+                                    if (e.key === "Escape") cancelEdit();
+                                  }}
+                                />
+                                <span className="text-xs text-muted-foreground">{marker.unit}</span>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0"
+                                  onClick={handleSaveEdit}
+                                  disabled={editSaving}
+                                >
+                                  {editSaving ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Check className="h-4 w-4 text-green-600" />
+                                  )}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0"
+                                  onClick={cancelEdit}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </>
+                            ) : (
+                              // Display mode
+                              <>
+                                <div className="text-right">
+                                  <div className={`font-semibold ${getStatusColor(marker.status)}`}>
+                                    {marker.value} {marker.unit}
+                                  </div>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0 opacity-50 hover:opacity-100"
+                                  onClick={() => startEditMarker(latest.id, actualIdx, marker)}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
                         </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Add Marker Button */}
+                  {addingMarkerToResult === latest.id ? (
+                    <div className="mt-4 p-3 border rounded-lg space-y-3">
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Marker name"
+                          value={newMarker.name}
+                          onChange={(e) => setNewMarker({ ...newMarker, name: e.target.value })}
+                          className="flex-1"
+                        />
+                        <Input
+                          type="number"
+                          step="any"
+                          placeholder="Value"
+                          value={newMarker.value}
+                          onChange={(e) => setNewMarker({ ...newMarker, value: e.target.value })}
+                          className="w-24"
+                        />
+                        <Input
+                          placeholder="Unit"
+                          value={newMarker.unit}
+                          onChange={(e) => setNewMarker({ ...newMarker, unit: e.target.value })}
+                          className="w-24"
+                        />
                       </div>
-                      <div className="text-right">
-                        <div className={`font-semibold ${getStatusColor(marker.status)}`}>
-                          {marker.value} {marker.unit}
-                        </div>
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setAddingMarkerToResult(null);
+                            setNewMarker({ name: "", value: "", unit: "", category: "" });
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={handleAddMarkerToResult}
+                          disabled={editSaving}
+                        >
+                          {editSaving ? (
+                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                          ) : (
+                            <Plus className="h-4 w-4 mr-1" />
+                          )}
+                          Add
+                        </Button>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full mt-4"
+                      onClick={() => {
+                        setAddingMarkerToResult(latest.id);
+                        setNewMarker({ ...newMarker, category: categoryKey });
+                      }}
+                    >
+                      <Plus className="h-4 w-4 mr-1" /> Add Marker
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 

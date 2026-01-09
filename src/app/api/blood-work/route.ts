@@ -200,3 +200,114 @@ export async function DELETE(request: NextRequest) {
     );
   }
 }
+
+// PATCH - Update an existing blood work result (markers, testDate, labName)
+export async function PATCH(request: NextRequest) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const id = request.nextUrl.searchParams.get("id");
+    if (!id) {
+      return NextResponse.json(
+        { error: "Blood work result ID is required" },
+        { status: 400 }
+      );
+    }
+
+    // Verify the result exists and belongs to the user
+    const [existing] = await db
+      .select()
+      .from(bloodWork)
+      .where(and(eq(bloodWork.id, id), eq(bloodWork.userId, user.id)))
+      .limit(1);
+
+    if (!existing) {
+      return NextResponse.json(
+        { error: "Blood work result not found" },
+        { status: 404 }
+      );
+    }
+
+    const body = await request.json();
+    const { markers, testDate, labName } = body;
+
+    // Build update object with only provided fields
+    const updateData: Record<string, unknown> = {};
+
+    if (markers !== undefined) {
+      // Validate markers if provided
+      if (!Array.isArray(markers)) {
+        return NextResponse.json(
+          { error: "Markers must be an array" },
+          { status: 400 }
+        );
+      }
+      for (const marker of markers) {
+        if (!marker.name || marker.value === undefined || !marker.unit) {
+          return NextResponse.json(
+            { error: "Each marker must have name, value, and unit" },
+            { status: 400 }
+          );
+        }
+      }
+      updateData.markers = markers;
+    }
+
+    if (testDate !== undefined) {
+      updateData.testDate = testDate;
+    }
+
+    if (labName !== undefined) {
+      updateData.labName = labName || null;
+    }
+
+    // If no fields to update, return current result
+    if (Object.keys(updateData).length === 0) {
+      const processedMarkers = processMarkers((existing.markers as BloodWorkMarker[]) || []);
+      const summary = calculateSummary(processedMarkers);
+      const groupedMarkers = groupMarkersByCategory(processedMarkers);
+
+      return NextResponse.json({
+        result: {
+          ...existing,
+          markers: processedMarkers,
+        },
+        summary,
+        groupedMarkers,
+        categories: BIOMARKER_CATEGORIES,
+      });
+    }
+
+    // Update the blood work result
+    const [updated] = await db
+      .update(bloodWork)
+      .set(updateData)
+      .where(eq(bloodWork.id, id))
+      .returning();
+
+    // Process markers and calculate summary
+    const updatedMarkers = (updated.markers as BloodWorkMarker[]) || [];
+    const processedMarkers = processMarkers(updatedMarkers);
+    const summary = calculateSummary(processedMarkers);
+    const groupedMarkers = groupMarkersByCategory(processedMarkers);
+
+    return NextResponse.json({
+      result: {
+        ...updated,
+        markers: processedMarkers,
+      },
+      summary,
+      groupedMarkers,
+      categories: BIOMARKER_CATEGORIES,
+    });
+  } catch (error) {
+    console.error("Update blood work error:", error);
+    return NextResponse.json(
+      { error: "Failed to update blood work result" },
+      { status: 500 }
+    );
+  }
+}
