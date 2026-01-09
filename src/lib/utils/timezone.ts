@@ -70,6 +70,35 @@ export function getTodayDateString(timezone: string = "UTC"): string {
 }
 
 /**
+ * Get yesterday's date as a string (YYYY-MM-DD) in the user's timezone
+ *
+ * WHY THIS IS NEEDED FOR SLEEP DATA:
+ * Sleep sessions are stored with `sleepDate` = the night you went to bed.
+ * If you went to bed Jan 7th at 11 PM and woke up Jan 8th at 7 AM,
+ * the sleepDate is "2025-01-07".
+ *
+ * So when showing "Last Night's Sleep" on Jan 8th, we need yesterday's date.
+ *
+ * @param timezone - IANA timezone string
+ * @returns Date string in YYYY-MM-DD format for yesterday
+ */
+export function getYesterdayDateString(timezone: string = "UTC"): string {
+  const now = new Date();
+
+  // Subtract 24 hours to get yesterday
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
+  return formatter.format(yesterday);
+}
+
+/**
  * Get a user's timezone from their settings object
  * Falls back to UTC if not set
  */

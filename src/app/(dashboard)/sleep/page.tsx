@@ -42,7 +42,7 @@ interface WeeklyAverage {
 
 export default function SleepPage() {
   const [sessions, setSessions] = useState<SleepSession[]>([]);
-  const [latest, setLatest] = useState<SleepSession | null>(null);
+  const [lastNight, setLastNight] = useState<SleepSession | null>(null);
   const [weeklyAvg, setWeeklyAvg] = useState<WeeklyAverage | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -54,7 +54,9 @@ export default function SleepPage() {
 
         if (data.sessions) {
           setSessions(data.sessions);
-          setLatest(data.latest);
+          // Use lastNight (yesterday's data) for "Last Night" display
+          // This prevents showing stale data when no sleep was logged last night
+          setLastNight(data.lastNight);
           setWeeklyAvg(data.weeklyAverage);
         }
       } catch (error) {
@@ -75,30 +77,12 @@ export default function SleepPage() {
     );
   }
 
-  if (!latest) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">Sleep</h1>
-          <p className="text-muted-foreground">
-            Track and optimize your sleep quality
-          </p>
-        </div>
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-            <BedDouble className="h-16 w-16 mb-4 opacity-50" />
-            <p className="text-lg">No sleep data yet</p>
-            <p className="text-sm">Sleep sessions will appear here once tracked</p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  const totalSleepMinutes =
-    (latest.deepSleepMinutes || 0) +
-    (latest.remSleepMinutes || 0) +
-    (latest.lightSleepMinutes || 0);
+  // Calculate total sleep minutes for lastNight (if available)
+  const totalSleepMinutes = lastNight
+    ? (lastNight.deepSleepMinutes || 0) +
+      (lastNight.remSleepMinutes || 0) +
+      (lastNight.lightSleepMinutes || 0)
+    : 0;
 
   const formatTime = (dateStr: string) => {
     return format(new Date(dateStr), "h:mm a");
@@ -127,201 +111,214 @@ export default function SleepPage() {
         </p>
       </div>
 
-      {/* Main Score & Duration */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="md:col-span-1">
-          <CardContent className="p-6 flex flex-col items-center justify-center min-h-[200px]">
-            <ScoreRing
-              score={latest.sleepScore || 0}
-              size="lg"
-              label="Sleep Score"
-              sublabel="Last night"
-            />
-            <Dialog>
-              <DialogTrigger asChild>
-                <button className="mt-3 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                  <Info className="h-3 w-3" />
-                  How is this calculated?
-                </button>
-              </DialogTrigger>
-              <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle>How Your Sleep Score Works</DialogTitle>
-                  <DialogDescription>
-                    Based on Pittsburgh Sleep Quality Index research
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 text-sm">
-                  <p className="text-muted-foreground">
-                    Your sleep score is a weighted average of 7 components:
-                  </p>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="font-medium">Duration</span>
-                      <span className="text-muted-foreground">20% — 7-9h is optimal</span>
+      {/* Main Score & Duration - Only show if we have last night's data */}
+      {lastNight ? (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card className="md:col-span-1">
+              <CardContent className="p-6 flex flex-col items-center justify-center min-h-[200px]">
+                <ScoreRing
+                  score={lastNight.sleepScore || 0}
+                  size="lg"
+                  label="Sleep Score"
+                  sublabel="Last night"
+                />
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <button className="mt-3 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                      <Info className="h-3 w-3" />
+                      How is this calculated?
+                    </button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>How Your Sleep Score Works</DialogTitle>
+                      <DialogDescription>
+                        Based on Pittsburgh Sleep Quality Index research
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 text-sm">
+                      <p className="text-muted-foreground">
+                        Your sleep score is a weighted average of 7 components:
+                      </p>
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="font-medium">Duration</span>
+                          <span className="text-muted-foreground">20% — 7-9h is optimal</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="font-medium">Efficiency</span>
+                          <span className="text-muted-foreground">20% — time asleep vs in bed</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="font-medium">Deep Sleep</span>
+                          <span className="text-muted-foreground">15% — 15-20% is ideal</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="font-medium">REM Sleep</span>
+                          <span className="text-muted-foreground">15% — 20-25% is ideal</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="font-medium">Time to Sleep</span>
+                          <span className="text-muted-foreground">10% — under 15min is best</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="font-medium">Awakenings</span>
+                          <span className="text-muted-foreground">10% — less is better</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="font-medium">HRV</span>
+                          <span className="text-muted-foreground">10% — vs your baseline</span>
+                        </div>
+                      </div>
+                      <div className="pt-2 border-t text-muted-foreground">
+                        <p className="text-xs">
+                          HRV compares tonight to your personal 14-day baseline using statistical analysis,
+                          so scores are personalized to you.
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="font-medium">Efficiency</span>
-                      <span className="text-muted-foreground">20% — time asleep vs in bed</span>
+                  </DialogContent>
+                </Dialog>
+              </CardContent>
+            </Card>
+
+            <Card className="md:col-span-2">
+              <CardContent className="p-6">
+                <h3 className="font-medium mb-4">Last Night&apos;s Sleep</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Clock className="h-4 w-4" />
+                      <span className="text-sm">Duration</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="font-medium">Deep Sleep</span>
-                      <span className="text-muted-foreground">15% — 15-20% is ideal</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="font-medium">REM Sleep</span>
-                      <span className="text-muted-foreground">15% — 20-25% is ideal</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="font-medium">Time to Sleep</span>
-                      <span className="text-muted-foreground">10% — under 15min is best</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="font-medium">Awakenings</span>
-                      <span className="text-muted-foreground">10% — less is better</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="font-medium">HRV</span>
-                      <span className="text-muted-foreground">10% — vs your baseline</span>
-                    </div>
-                  </div>
-                  <div className="pt-2 border-t text-muted-foreground">
-                    <p className="text-xs">
-                      HRV compares tonight to your personal 14-day baseline using statistical analysis,
-                      so scores are personalized to you.
+                    <p className="text-2xl font-bold">
+                      {formatDuration(lastNight.totalMinutes)}
                     </p>
                   </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Zap className="h-4 w-4" />
+                      <span className="text-sm">Efficiency</span>
+                    </div>
+                    <p className="text-2xl font-bold">
+                      {Math.round(Number(lastNight.efficiency) || 0)}%
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Moon className="h-4 w-4" />
+                      <span className="text-sm">Bedtime</span>
+                    </div>
+                    <p className="text-2xl font-bold">{formatTime(lastNight.bedtime)}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Brain className="h-4 w-4" />
+                      <span className="text-sm">Wake Time</span>
+                    </div>
+                    <p className="text-2xl font-bold">{formatTime(lastNight.wakeTime)}</p>
+                  </div>
                 </div>
-              </DialogContent>
-            </Dialog>
-          </CardContent>
-        </Card>
-
-        <Card className="md:col-span-2">
-          <CardContent className="p-6">
-            <h3 className="font-medium mb-4">Last Night&apos;s Sleep</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Clock className="h-4 w-4" />
-                  <span className="text-sm">Duration</span>
-                </div>
-                <p className="text-2xl font-bold">
-                  {formatDuration(latest.totalMinutes)}
-                </p>
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Zap className="h-4 w-4" />
-                  <span className="text-sm">Efficiency</span>
-                </div>
-                <p className="text-2xl font-bold">
-                  {Math.round(Number(latest.efficiency) || 0)}%
-                </p>
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Moon className="h-4 w-4" />
-                  <span className="text-sm">Bedtime</span>
-                </div>
-                <p className="text-2xl font-bold">{formatTime(latest.bedtime)}</p>
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Brain className="h-4 w-4" />
-                  <span className="text-sm">Wake Time</span>
-                </div>
-                <p className="text-2xl font-bold">{formatTime(latest.wakeTime)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Sleep Stages */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Sleep Stages</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-3">
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full bg-indigo-600"></span>
-                  Deep Sleep
-                </span>
-                <span>
-                  {formatDuration(latest.deepSleepMinutes || 0)} (
-                  {totalSleepMinutes > 0
-                    ? Math.round(((latest.deepSleepMinutes || 0) / totalSleepMinutes) * 100)
-                    : 0}
-                  %)
-                </span>
-              </div>
-              <Progress
-                value={
-                  totalSleepMinutes > 0
-                    ? ((latest.deepSleepMinutes || 0) / totalSleepMinutes) * 100
-                    : 0
-                }
-                className="h-3"
-              />
-            </div>
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full bg-purple-500"></span>
-                  REM Sleep
-                </span>
-                <span>
-                  {formatDuration(latest.remSleepMinutes || 0)} (
-                  {totalSleepMinutes > 0
-                    ? Math.round(((latest.remSleepMinutes || 0) / totalSleepMinutes) * 100)
-                    : 0}
-                  %)
-                </span>
-              </div>
-              <Progress
-                value={
-                  totalSleepMinutes > 0
-                    ? ((latest.remSleepMinutes || 0) / totalSleepMinutes) * 100
-                    : 0
-                }
-                className="h-3"
-              />
-            </div>
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full bg-blue-400"></span>
-                  Light Sleep
-                </span>
-                <span>
-                  {formatDuration(latest.lightSleepMinutes || 0)} (
-                  {totalSleepMinutes > 0
-                    ? Math.round(((latest.lightSleepMinutes || 0) / totalSleepMinutes) * 100)
-                    : 0}
-                  %)
-                </span>
-              </div>
-              <Progress
-                value={
-                  totalSleepMinutes > 0
-                    ? ((latest.lightSleepMinutes || 0) / totalSleepMinutes) * 100
-                    : 0
-                }
-                className="h-3"
-              />
-            </div>
-            {(latest.awakeMinutes || 0) > 0 && (
-              <div className="text-sm text-muted-foreground pt-2">
-                Time awake: {formatDuration(latest.awakeMinutes || 0)}
-              </div>
-            )}
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
+
+          {/* Sleep Stages */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Sleep Stages</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full bg-indigo-600"></span>
+                      Deep Sleep
+                    </span>
+                    <span>
+                      {formatDuration(lastNight.deepSleepMinutes || 0)} (
+                      {totalSleepMinutes > 0
+                        ? Math.round(((lastNight.deepSleepMinutes || 0) / totalSleepMinutes) * 100)
+                        : 0}
+                      %)
+                    </span>
+                  </div>
+                  <Progress
+                    value={
+                      totalSleepMinutes > 0
+                        ? ((lastNight.deepSleepMinutes || 0) / totalSleepMinutes) * 100
+                        : 0
+                    }
+                    className="h-3"
+                  />
+                </div>
+                <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full bg-purple-500"></span>
+                      REM Sleep
+                    </span>
+                    <span>
+                      {formatDuration(lastNight.remSleepMinutes || 0)} (
+                      {totalSleepMinutes > 0
+                        ? Math.round(((lastNight.remSleepMinutes || 0) / totalSleepMinutes) * 100)
+                        : 0}
+                      %)
+                    </span>
+                  </div>
+                  <Progress
+                    value={
+                      totalSleepMinutes > 0
+                        ? ((lastNight.remSleepMinutes || 0) / totalSleepMinutes) * 100
+                        : 0
+                    }
+                    className="h-3"
+                  />
+                </div>
+                <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full bg-blue-400"></span>
+                      Light Sleep
+                    </span>
+                    <span>
+                      {formatDuration(lastNight.lightSleepMinutes || 0)} (
+                      {totalSleepMinutes > 0
+                        ? Math.round(((lastNight.lightSleepMinutes || 0) / totalSleepMinutes) * 100)
+                        : 0}
+                      %)
+                    </span>
+                  </div>
+                  <Progress
+                    value={
+                      totalSleepMinutes > 0
+                        ? ((lastNight.lightSleepMinutes || 0) / totalSleepMinutes) * 100
+                        : 0
+                    }
+                    className="h-3"
+                  />
+                </div>
+                {(lastNight.awakeMinutes || 0) > 0 && (
+                  <div className="text-sm text-muted-foreground pt-2">
+                    Time awake: {formatDuration(lastNight.awakeMinutes || 0)}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      ) : (
+        /* No data for last night - show empty state */
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+            <Moon className="h-12 w-12 mb-4 opacity-50" />
+            <p className="text-lg font-medium">No sleep data for last night</p>
+            <p className="text-sm">Sleep data will appear here once logged</p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Weekly Trend */}
       <Card>

@@ -7,6 +7,7 @@ import {
   calculatePersonalBaseline,
   SleepSessionData,
 } from "@/lib/utils/sleep-scoring";
+import { getYesterdayDateString, getUserTimezone } from "@/lib/utils/timezone";
 
 // GET - Get sleep sessions
 export async function GET(request: NextRequest) {
@@ -19,6 +20,10 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const date = searchParams.get("date"); // Get specific night
     const limit = parseInt(searchParams.get("limit") || "7");
+
+    // Get user's timezone for "last night" calculation
+    const userTimezone = getUserTimezone(user.settings);
+    const lastNightDate = getYesterdayDateString(userTimezone);
 
     let results;
 
@@ -44,7 +49,12 @@ export async function GET(request: NextRequest) {
         .limit(limit);
     }
 
+    // `latest` is the most recent session (for charts/trends)
     const latest = results[0] || null;
+
+    // `lastNight` is specifically yesterday's session (for "Last Night's Sleep" display)
+    // This prevents showing stale data when no sleep was logged last night
+    const lastNight = results.find((s) => s.sleepDate === lastNightDate) || null;
 
     // Calculate weekly average (only count sessions with valid data)
     const sessionsWithScores = results.filter((s) => s.sleepScore !== null);
@@ -112,6 +122,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       sessions: results,
       latest,
+      lastNight, // Specifically yesterday's data (null if no data for last night)
       weeklyAverage: weeklyAvg,
       scoreDetails,
     });

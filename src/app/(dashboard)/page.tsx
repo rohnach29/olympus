@@ -14,6 +14,7 @@ import {
 import { getCurrentUser } from "@/lib/auth/session";
 import { db, healthMetrics, sleepSessions, workouts } from "@/lib/db";
 import { eq, desc, gte, and, sql } from "drizzle-orm";
+import { getYesterdayDateString } from "@/lib/utils/timezone";
 
 // Default values when no data available
 const defaultMetrics = {
@@ -87,13 +88,15 @@ export default async function DashboardPage() {
       // Today in user's timezone (as UTC timestamp)
       const today = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0) - userOffsetMs);
 
-      // Fetch point-in-time metrics (most recent value of EACH type) - HR, HRV
-      // Using DISTINCT ON to get one record per metric type (the most recent one)
+      // Fetch point-in-time metrics for TODAY only (most recent value of EACH type)
+      // Using DISTINCT ON to get one record per metric type (the most recent one today)
+      // This ensures we don't show stale data from previous days
       const pointInTimeMetrics = await db.execute(sql`
         SELECT DISTINCT ON (metric_type) *
         FROM health_metrics
         WHERE user_id = ${user.id}
           AND metric_type IN ('resting_heart_rate', 'hrv', 'respiratory_rate', 'blood_oxygen')
+          AND recorded_at >= ${today}
         ORDER BY metric_type, recorded_at DESC
       `) as unknown as Array<{ metric_type: string; value: string }>;
 
@@ -139,16 +142,22 @@ export default async function DashboardPage() {
         sleepDisplay: null, // Will get from sleepSessions
       };
 
-      // Fetch most recent sleep session
-      const recentSleep = await db
+      // Fetch LAST NIGHT's sleep session only (not just "most recent")
+      // sleepDate represents the night you went to bed, so "last night" = yesterday
+      const lastNightDate = getYesterdayDateString(userTimezone);
+      const lastNightSleep = await db
         .select()
         .from(sleepSessions)
-        .where(eq(sleepSessions.userId, user.id))
-        .orderBy(desc(sleepSessions.sleepDate))
+        .where(
+          and(
+            eq(sleepSessions.userId, user.id),
+            eq(sleepSessions.sleepDate, lastNightDate)
+          )
+        )
         .limit(1);
 
-      if (recentSleep.length > 0) {
-        const sleep = recentSleep[0];
+      if (lastNightSleep.length > 0) {
+        const sleep = lastNightSleep[0];
         const hours = Math.floor(sleep.totalMinutes / 60);
         const mins = sleep.totalMinutes % 60;
         sleepDuration = `${hours}h ${mins}m`;
