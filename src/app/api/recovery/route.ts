@@ -31,6 +31,11 @@ export async function GET(request: NextRequest) {
     const baselineDate = new Date(todayStart);
     baselineDate.setDate(baselineDate.getDate() - 14);
 
+    // Calculate yesterday's date (sleep from last night has sleepDate = yesterday)
+    const yesterdayDate = new Date(todayStart);
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterdayDateStr = yesterdayDate.toISOString().split("T")[0];
+
     // Fetch sleep sessions for baseline and current data
     const sleepData = await db
       .select()
@@ -44,8 +49,9 @@ export async function GET(request: NextRequest) {
       .orderBy(desc(sleepSessions.sleepDate))
       .limit(14);
 
-    // Get today's sleep (or most recent)
-    const todaySleep = sleepData[0] || null;
+    // Get sleep from LAST NIGHT only (sleepDate should be yesterday)
+    // Recovery today is based on sleep from the previous night, not older sleep
+    const todaySleep = sleepData.find(s => s.sleepDate === yesterdayDateStr) || null;
 
     // Fetch health metrics for baseline
     const recentMetrics = await db
@@ -105,10 +111,11 @@ export async function GET(request: NextRequest) {
 
     const recoveryBaseline: RecoveryBaseline | null = calculateRecoveryBaseline(baselineData);
 
-    // Get current HRV and resting HR (from sleep or health metrics)
-    const currentHrv = todaySleep?.hrvAvg || metricsByType["hrv"]?.latest || null;
-    const currentRestingHr = todaySleep?.restingHr || metricsByType["resting_hr"]?.latest || null;
-    const todaySleepScore = todaySleep?.sleepScore || 0;
+    // Get current HRV and resting HR ONLY from last night's sleep
+    // Don't fall back to old metrics - we need data from the actual recovery period
+    const currentHrv = todaySleep?.hrvAvg ?? null;
+    const currentRestingHr = todaySleep?.restingHr ?? null;
+    const todaySleepScore = todaySleep?.sleepScore ?? null;
 
     // Calculate bedtime in minutes from midnight
     const todayBedtime = todaySleep?.bedtime
@@ -227,7 +234,8 @@ export async function GET(request: NextRequest) {
     }));
 
     // Add today if not in existing scores (only if we have a valid score)
-    if (!trendData.find(t => t.date === today) && recoveryResult.recoveryScore !== null) {
+    // When recoveryScore is not null, we have all data including sleep
+    if (!trendData.find(t => t.date === today) && recoveryResult.recoveryScore !== null && todaySleepScore !== null) {
       trendData.unshift({
         date: today,
         recoveryScore: recoveryResult.recoveryScore,
@@ -236,8 +244,8 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Calculate readiness only if we have recovery score
-    const readinessScore = recoveryResult.recoveryScore !== null
+    // Calculate readiness only if we have recovery score and sleep score
+    const readinessScore = recoveryResult.recoveryScore !== null && todaySleepScore !== null
       ? Math.round((recoveryResult.recoveryScore + todaySleepScore) / 2)
       : null;
 

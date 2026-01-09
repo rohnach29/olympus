@@ -50,7 +50,7 @@ export interface RecoveryBaseline {
 }
 
 export interface RecoveryInputs {
-  sleepScore: number;
+  sleepScore: number | null;
   hrvValue: number | null;
   restingHr: number | null;
   previousDayStrain: number;
@@ -532,55 +532,38 @@ export function calculateRecovery(inputs: RecoveryInputs): RecoveryResult {
     sleepConsistency: { score: sleepConsistencyResult.score, weight: RECOVERY_WEIGHTS.sleepConsistency, hasData: sleepConsistencyResult.hasData },
   };
 
-  // Check if we have enough data to calculate a meaningful recovery score
-  // Require at least sleep data (the most important factor at 35%)
-  const hasEnoughData = sleepQualityResult.hasData;
+  // Check if ALL factors have data - require complete data for recovery score
+  const allFactorsHaveData =
+    sleepQualityResult.hasData &&
+    hrvResult.hasData &&
+    restingHrResult.hasData &&
+    strainImpactResult.hasData &&
+    sleepConsistencyResult.hasData;
 
-  // If no sleep data, we can't calculate a meaningful recovery score
-  if (!hasEnoughData) {
+  // If ANY factor is missing data, we can't calculate a meaningful recovery score
+  if (!allFactorsHaveData) {
     return {
       recoveryScore: null,
       category: "insufficient_data",
       components,
-      recommendation: "No sleep data available. Wear your device tonight to track recovery.",
-      trainingRecommendation: "Unable to provide recommendations without sleep data.",
+      recommendation: "There is not enough data to calculate the recovery score.",
+      trainingRecommendation: "Wear your device tonight to track sleep, HRV, and heart rate.",
       hasEnoughData: false,
     };
   }
 
-  // Calculate weighted total, only using components that have data
-  // Re-normalize weights based on available data
-  let totalWeight = 0;
-  let weightedSum = 0;
+  // All factors have data - calculate weighted total
+  const recoveryScore = Math.round(
+    sleepQualityResult.score! * RECOVERY_WEIGHTS.sleepQuality +
+    hrvResult.score! * RECOVERY_WEIGHTS.hrvStatus +
+    restingHrResult.score! * RECOVERY_WEIGHTS.restingHrStatus +
+    strainImpactResult.score! * RECOVERY_WEIGHTS.strainImpact +
+    sleepConsistencyResult.score! * RECOVERY_WEIGHTS.sleepConsistency
+  );
 
-  if (sleepQualityResult.hasData && sleepQualityResult.score !== null) {
-    weightedSum += sleepQualityResult.score * RECOVERY_WEIGHTS.sleepQuality;
-    totalWeight += RECOVERY_WEIGHTS.sleepQuality;
-  }
-  if (hrvResult.hasData && hrvResult.score !== null) {
-    weightedSum += hrvResult.score * RECOVERY_WEIGHTS.hrvStatus;
-    totalWeight += RECOVERY_WEIGHTS.hrvStatus;
-  }
-  if (restingHrResult.hasData && restingHrResult.score !== null) {
-    weightedSum += restingHrResult.score * RECOVERY_WEIGHTS.restingHrStatus;
-    totalWeight += RECOVERY_WEIGHTS.restingHrStatus;
-  }
-  if (strainImpactResult.hasData && strainImpactResult.score !== null) {
-    weightedSum += strainImpactResult.score * RECOVERY_WEIGHTS.strainImpact;
-    totalWeight += RECOVERY_WEIGHTS.strainImpact;
-  }
-  if (sleepConsistencyResult.hasData && sleepConsistencyResult.score !== null) {
-    weightedSum += sleepConsistencyResult.score * RECOVERY_WEIGHTS.sleepConsistency;
-    totalWeight += RECOVERY_WEIGHTS.sleepConsistency;
-  }
-
-  // Normalize to 0-100 scale
-  const recoveryScore = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : null;
-
-  // Determine category
+  // Determine category (recoveryScore is guaranteed to be a number here)
   let category: RecoveryResult["category"];
-  if (recoveryScore === null) category = "insufficient_data";
-  else if (recoveryScore >= 85) category = "optimal";
+  if (recoveryScore >= 85) category = "optimal";
   else if (recoveryScore >= 70) category = "good";
   else if (recoveryScore >= 50) category = "moderate";
   else category = "low";
@@ -608,7 +591,7 @@ export function calculateRecovery(inputs: RecoveryInputs): RecoveryResult {
     components,
     recommendation: recommendations[category],
     trainingRecommendation: trainingRecs[category],
-    hasEnoughData,
+    hasEnoughData: true,
   };
 }
 
