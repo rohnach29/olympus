@@ -134,13 +134,14 @@ export function calculatePhenoAge(input: PhenoAgeInput): PhenoAgeResult {
   // Convert to mortality score and then to PhenoAge
   // Using Gompertz mortality model parameters from Levine 2018
   const gamma = 0.0076927;
-  const lambda = 0.0022802;
 
-  // Mortality score
+  // Mortality score (probability of dying within a reference period)
   const mortalityScore = 1 - Math.exp(-Math.exp(xb) * (Math.exp(120 * gamma) - 1) / gamma);
 
-  // Convert back to PhenoAge
-  const biologicalAge = (1 / gamma) * Math.log(1 + gamma * Math.log(1 - mortalityScore) / lambda) + 120;
+  // Convert mortality score back to PhenoAge using the published constants
+  // Formula from Levine et al. 2018 supplementary materials
+  // These constants (141.50225, 0.00553, 0.090165) are derived from the Gompertz model fit
+  const biologicalAge = 141.50225 + Math.log(-0.00553 * Math.log(1 - mortalityScore)) / 0.090165;
 
   // Clamp to reasonable range
   const clampedAge = Math.max(20, Math.min(120, biologicalAge));
