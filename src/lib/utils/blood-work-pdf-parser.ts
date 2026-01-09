@@ -481,6 +481,46 @@ function extractWithRegex(text: string): ExtractedMarker[] {
 }
 
 /**
+ * Normalize marker values to standard units
+ * Handles common unit mismatches in lab reports (especially Indian labs)
+ */
+function normalizeMarkerValue(marker: ExtractedMarker): ExtractedMarker {
+  const { name, value, unit } = marker;
+
+  // WBC: If value > 100, it's likely in cells/μL (should be K/μL)
+  // Normal WBC is 4.5-11 K/μL = 4500-11000 cells/μL
+  if (name === "WBC" && value > 100) {
+    return {
+      ...marker,
+      value: parseFloat((value / 1000).toFixed(2)),
+      unit: "K/μL",
+    };
+  }
+
+  // Platelets: If value > 1000, it's likely in cells/μL (should be K/μL)
+  // Normal platelets: 150-400 K/μL = 150000-400000 cells/μL
+  if (name === "Platelets" && value > 1000) {
+    return {
+      ...marker,
+      value: parseFloat((value / 1000).toFixed(0)),
+      unit: "K/μL",
+    };
+  }
+
+  // RBC: If value > 10, it's likely in 10^6/μL format reported differently
+  // Normal RBC: 4-5.5 M/μL
+  if (name === "RBC" && value > 10) {
+    return {
+      ...marker,
+      value: parseFloat((value / 1).toFixed(2)), // Keep as-is but ensure proper format
+      unit: "M/μL",
+    };
+  }
+
+  return marker;
+}
+
+/**
  * Main function: Parse blood work PDF and extract biomarkers
  */
 export async function parseBloodWorkPDF(pdfBuffer: Buffer): Promise<ParseResult> {
@@ -507,9 +547,11 @@ export async function parseBloodWorkPDF(pdfBuffer: Buffer): Promise<ParseResult>
         const parsed = parseJSONResponse(llmResponse);
 
         if (parsed.markers.length > 0) {
+          // Apply unit normalization
+          const normalizedMarkers = parsed.markers.map(normalizeMarkerValue);
           return {
             success: true,
-            markers: parsed.markers,
+            markers: normalizedMarkers,
             labName: parsed.labName,
             testDate: parsed.testDate,
             rawText,
@@ -532,9 +574,12 @@ export async function parseBloodWorkPDF(pdfBuffer: Buffer): Promise<ParseResult>
       };
     }
 
+    // Apply unit normalization
+    const normalizedMarkers = regexMarkers.map(normalizeMarkerValue);
+
     return {
       success: true,
-      markers: regexMarkers,
+      markers: normalizedMarkers,
       rawText,
     };
   } catch (error) {

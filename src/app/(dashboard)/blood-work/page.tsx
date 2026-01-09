@@ -18,7 +18,6 @@ import {
   FileText,
   Keyboard,
   Pencil,
-  Check,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
@@ -65,6 +64,16 @@ interface ExpandedResultData {
 
 interface Categories {
   [key: string]: string;
+}
+
+interface EditingMarkerState {
+  resultId: string;
+  markerIndex: number;
+  name: string;
+  value: string;
+  unit: string;
+  referenceMin: string;
+  referenceMax: string;
 }
 
 // Common biomarkers for quick add
@@ -170,13 +179,8 @@ export default function BloodWorkPage() {
   const [pdfUploading, setPdfUploading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
 
-  // Inline editing state
-  const [editingMarker, setEditingMarker] = useState<{
-    resultId: string;
-    markerIndex: number;
-    originalName: string;
-  } | null>(null);
-  const [editValue, setEditValue] = useState("");
+  // Rich edit card state
+  const [editingMarker, setEditingMarker] = useState<EditingMarkerState | null>(null);
   const [editSaving, setEditSaving] = useState(false);
 
   // Add marker to existing result state
@@ -367,25 +371,47 @@ export default function BloodWorkPage() {
     }
   }
 
-  // Start editing a marker
+  // Start editing a marker - opens rich edit card
   function startEditMarker(resultId: string, markerIndex: number, marker: Marker) {
-    setEditingMarker({ resultId, markerIndex, originalName: marker.name });
-    setEditValue(String(marker.value));
+    setEditingMarker({
+      resultId,
+      markerIndex,
+      name: marker.name,
+      value: String(marker.value),
+      unit: marker.unit,
+      referenceMin: marker.referenceMin !== undefined ? String(marker.referenceMin) : "",
+      referenceMax: marker.referenceMax !== undefined ? String(marker.referenceMax) : "",
+    });
   }
 
   // Cancel editing
   function cancelEdit() {
     setEditingMarker(null);
-    setEditValue("");
   }
 
-  // Save edited marker value
+  // Update editing marker field
+  function updateEditField(field: keyof EditingMarkerState, value: string) {
+    if (!editingMarker) return;
+    setEditingMarker({ ...editingMarker, [field]: value });
+  }
+
+  // Save edited marker with all fields
   async function handleSaveEdit() {
     if (!editingMarker || !expandedData) return;
 
-    const newValue = parseFloat(editValue);
+    const newValue = parseFloat(editingMarker.value);
     if (isNaN(newValue)) {
-      setError("Please enter a valid number");
+      setError("Please enter a valid number for value");
+      return;
+    }
+
+    if (!editingMarker.name.trim()) {
+      setError("Marker name is required");
+      return;
+    }
+
+    if (!editingMarker.unit.trim()) {
+      setError("Unit is required");
       return;
     }
 
@@ -394,12 +420,27 @@ export default function BloodWorkPage() {
 
     try {
       // Get current markers and update the edited one
-      const currentMarkers = (expandedData.result.markers || []).map((m, idx) => ({
-        name: m.name,
-        value: idx === editingMarker.markerIndex ? newValue : m.value,
-        unit: m.unit,
-        category: m.category,
-      }));
+      const currentMarkers = (expandedData.result.markers || []).map((m, idx) => {
+        if (idx === editingMarker.markerIndex) {
+          return {
+            name: editingMarker.name.trim(),
+            value: newValue,
+            unit: editingMarker.unit.trim(),
+            category: m.category,
+            // Include custom reference ranges if provided
+            ...(editingMarker.referenceMin && { referenceMin: parseFloat(editingMarker.referenceMin) }),
+            ...(editingMarker.referenceMax && { referenceMax: parseFloat(editingMarker.referenceMax) }),
+          };
+        }
+        return {
+          name: m.name,
+          value: m.value,
+          unit: m.unit,
+          category: m.category,
+          ...(m.referenceMin !== undefined && { referenceMin: m.referenceMin }),
+          ...(m.referenceMax !== undefined && { referenceMax: m.referenceMax }),
+        };
+      });
 
       const response = await fetch(`/api/blood-work?id=${editingMarker.resultId}`, {
         method: "PATCH",
@@ -412,9 +453,10 @@ export default function BloodWorkPage() {
         throw new Error(data.error || "Failed to update marker");
       }
 
+      const resultId = editingMarker.resultId;
       cancelEdit();
       // Refresh the expanded result
-      await fetchResultDetails(editingMarker.resultId);
+      await fetchResultDetails(resultId);
       // Also refresh the list to update marker counts
       const listResponse = await fetch("/api/blood-work");
       if (listResponse.ok) {
@@ -720,73 +762,133 @@ export default function BloodWorkPage() {
                                 const actualIdx = categoryMarkerIndices[displayIdx]?.idx ?? displayIdx;
                                 const isEditing = editingMarker?.resultId === result.id && editingMarker?.markerIndex === actualIdx;
 
-                                return (
-                                  <div
-                                    key={`${marker.name}-${actualIdx}`}
-                                    className={`flex items-center justify-between p-2 rounded-lg ${getStatusBgColor(marker.status)}`}
-                                  >
-                                    <div className="flex items-center gap-2">
-                                      {getStatusIcon(marker.status)}
-                                      <div>
-                                        <div className="text-sm font-medium">{marker.name}</div>
-                                        <div className="text-xs text-muted-foreground">
-                                          Range: {formatRange(marker)}
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      {isEditing ? (
-                                        <>
-                                          <Input
-                                            type="number"
-                                            step="any"
-                                            value={editValue}
-                                            onChange={(e) => setEditValue(e.target.value)}
-                                            className="w-20 h-7 text-sm"
-                                            autoFocus
-                                            onKeyDown={(e) => {
-                                              if (e.key === "Enter") handleSaveEdit();
-                                              if (e.key === "Escape") cancelEdit();
-                                            }}
-                                          />
-                                          <span className="text-xs text-muted-foreground">{marker.unit}</span>
+                                if (isEditing) {
+                                  // Rich Edit Card
+                                  return (
+                                    <div
+                                      key={`${marker.name}-${actualIdx}`}
+                                      className="p-3 rounded-lg border-2 border-primary/30 bg-background shadow-sm space-y-3"
+                                    >
+                                      {/* Header row */}
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Edit Marker</span>
+                                        <div className="flex items-center gap-1">
                                           <Button
                                             size="sm"
                                             variant="ghost"
-                                            className="h-7 w-7 p-0"
+                                            className="h-7 px-2 text-xs"
+                                            onClick={cancelEdit}
+                                          >
+                                            Cancel
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            className="h-7 px-3 text-xs"
                                             onClick={handleSaveEdit}
                                             disabled={editSaving}
                                           >
                                             {editSaving ? (
                                               <Loader2 className="h-3 w-3 animate-spin" />
                                             ) : (
-                                              <Check className="h-3 w-3 text-green-600" />
+                                              "Save"
                                             )}
                                           </Button>
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            className="h-7 w-7 p-0"
-                                            onClick={cancelEdit}
-                                          >
-                                            <X className="h-3 w-3" />
-                                          </Button>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <div className={`text-sm font-semibold ${getStatusColor(marker.status)}`}>
-                                            {marker.value} {marker.unit}
+                                        </div>
+                                      </div>
+
+                                      {/* Name and Value row */}
+                                      <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1">
+                                          <Label className="text-xs text-muted-foreground">Name</Label>
+                                          <Input
+                                            value={editingMarker.name}
+                                            onChange={(e) => updateEditField("name", e.target.value)}
+                                            className="h-8 text-sm"
+                                            placeholder="Marker name"
+                                          />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2">
+                                          <div className="space-y-1">
+                                            <Label className="text-xs text-muted-foreground">Value</Label>
+                                            <Input
+                                              type="number"
+                                              step="any"
+                                              value={editingMarker.value}
+                                              onChange={(e) => updateEditField("value", e.target.value)}
+                                              className="h-8 text-sm"
+                                              placeholder="0"
+                                              autoFocus
+                                              onKeyDown={(e) => {
+                                                if (e.key === "Enter") handleSaveEdit();
+                                                if (e.key === "Escape") cancelEdit();
+                                              }}
+                                            />
                                           </div>
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            className="h-7 w-7 p-0 opacity-50 hover:opacity-100"
-                                            onClick={() => startEditMarker(result.id, actualIdx, marker)}
-                                          >
-                                            <Pencil className="h-3 w-3" />
-                                          </Button>
-                                        </>
-                                      )}
+                                          <div className="space-y-1">
+                                            <Label className="text-xs text-muted-foreground">Unit</Label>
+                                            <Input
+                                              value={editingMarker.unit}
+                                              onChange={(e) => updateEditField("unit", e.target.value)}
+                                              className="h-8 text-sm"
+                                              placeholder="mg/dL"
+                                            />
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Reference Range row */}
+                                      <div className="space-y-1">
+                                        <Label className="text-xs text-muted-foreground">
+                                          Reference Range ({editingMarker.unit || "unit"})
+                                        </Label>
+                                        <div className="flex items-center gap-2">
+                                          <Input
+                                            type="number"
+                                            step="any"
+                                            value={editingMarker.referenceMin}
+                                            onChange={(e) => updateEditField("referenceMin", e.target.value)}
+                                            className="h-8 text-sm w-24"
+                                            placeholder="Min"
+                                          />
+                                          <span className="text-muted-foreground">—</span>
+                                          <Input
+                                            type="number"
+                                            step="any"
+                                            value={editingMarker.referenceMax}
+                                            onChange={(e) => updateEditField("referenceMax", e.target.value)}
+                                            className="h-8 text-sm w-24"
+                                            placeholder="Max"
+                                          />
+                                          <span className="text-xs text-muted-foreground ml-1">
+                                            {editingMarker.unit || ""}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+
+                                // Normal display mode
+                                return (
+                                  <div
+                                    key={`${marker.name}-${actualIdx}`}
+                                    className={`flex items-center justify-between p-2 rounded-lg ${getStatusBgColor(marker.status)} hover:ring-1 hover:ring-primary/20 transition-all cursor-pointer group`}
+                                    onClick={() => startEditMarker(result.id, actualIdx, marker)}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      {getStatusIcon(marker.status)}
+                                      <div>
+                                        <div className="text-sm font-medium">{marker.name}</div>
+                                        <div className="text-xs text-muted-foreground">
+                                          Range: {formatRange(marker)} {marker.unit}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <div className={`text-sm font-semibold ${getStatusColor(marker.status)}`}>
+                                        {marker.value} {marker.unit}
+                                      </div>
+                                      <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50 transition-opacity" />
                                     </div>
                                   </div>
                                 );
