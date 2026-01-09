@@ -161,39 +161,52 @@ export async function GET(request: NextRequest) {
       },
     };
 
+    // Helper to determine impact based on score
+    const getImpact = (score: number | null, hasData: boolean): string => {
+      if (!hasData || score === null) return "no_data";
+      if (score >= 75) return "positive";
+      if (score >= 50) return "neutral";
+      return "negative";
+    };
+
     // Build recovery factors from evidence-based components
     const recoveryFactors = [
       {
         name: "Sleep Quality",
         score: recoveryResult.components.sleepQuality.score,
         weight: `${Math.round(recoveryResult.components.sleepQuality.weight * 100)}%`,
-        impact: recoveryResult.components.sleepQuality.score >= 75 ? "positive" : recoveryResult.components.sleepQuality.score >= 50 ? "neutral" : "negative",
+        impact: getImpact(recoveryResult.components.sleepQuality.score, recoveryResult.components.sleepQuality.hasData),
+        hasData: recoveryResult.components.sleepQuality.hasData,
       },
       {
         name: "HRV Status",
         score: recoveryResult.components.hrvStatus.score,
         weight: `${Math.round(recoveryResult.components.hrvStatus.weight * 100)}%`,
-        impact: recoveryResult.components.hrvStatus.score >= 75 ? "positive" : recoveryResult.components.hrvStatus.score >= 50 ? "neutral" : "negative",
+        impact: getImpact(recoveryResult.components.hrvStatus.score, recoveryResult.components.hrvStatus.hasData),
         zScore: recoveryResult.components.hrvStatus.zScore,
+        hasData: recoveryResult.components.hrvStatus.hasData,
       },
       {
         name: "Resting HR",
         score: recoveryResult.components.restingHrStatus.score,
         weight: `${Math.round(recoveryResult.components.restingHrStatus.weight * 100)}%`,
-        impact: recoveryResult.components.restingHrStatus.score >= 75 ? "positive" : recoveryResult.components.restingHrStatus.score >= 50 ? "neutral" : "negative",
+        impact: getImpact(recoveryResult.components.restingHrStatus.score, recoveryResult.components.restingHrStatus.hasData),
         zScore: recoveryResult.components.restingHrStatus.zScore,
+        hasData: recoveryResult.components.restingHrStatus.hasData,
       },
       {
         name: "Previous Strain",
         score: recoveryResult.components.strainImpact.score,
         weight: `${Math.round(recoveryResult.components.strainImpact.weight * 100)}%`,
-        impact: recoveryResult.components.strainImpact.score >= 75 ? "positive" : recoveryResult.components.strainImpact.score >= 50 ? "neutral" : "negative",
+        impact: getImpact(recoveryResult.components.strainImpact.score, recoveryResult.components.strainImpact.hasData),
+        hasData: recoveryResult.components.strainImpact.hasData,
       },
       {
         name: "Sleep Consistency",
         score: recoveryResult.components.sleepConsistency.score,
         weight: `${Math.round(recoveryResult.components.sleepConsistency.weight * 100)}%`,
-        impact: recoveryResult.components.sleepConsistency.score >= 75 ? "positive" : recoveryResult.components.sleepConsistency.score >= 50 ? "neutral" : "negative",
+        impact: getImpact(recoveryResult.components.sleepConsistency.score, recoveryResult.components.sleepConsistency.hasData),
+        hasData: recoveryResult.components.sleepConsistency.hasData,
       },
     ];
 
@@ -213,8 +226,8 @@ export async function GET(request: NextRequest) {
       strainScore: Number(s.strainScore) || 0,
     }));
 
-    // Add today if not in existing scores
-    if (!trendData.find(t => t.date === today)) {
+    // Add today if not in existing scores (only if we have a valid score)
+    if (!trendData.find(t => t.date === today) && recoveryResult.recoveryScore !== null) {
       trendData.unshift({
         date: today,
         recoveryScore: recoveryResult.recoveryScore,
@@ -223,15 +236,26 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Calculate readiness only if we have recovery score
+    const readinessScore = recoveryResult.recoveryScore !== null
+      ? Math.round((recoveryResult.recoveryScore + todaySleepScore) / 2)
+      : null;
+
+    // Format category for display (capitalize first letter, handle underscore)
+    const formattedStatus = recoveryResult.category === "insufficient_data"
+      ? "Insufficient Data"
+      : recoveryResult.category.charAt(0).toUpperCase() + recoveryResult.category.slice(1);
+
     return NextResponse.json({
-      today: {
+      today: recoveryResult.hasEnoughData ? {
         date: today,
         recoveryScore: recoveryResult.recoveryScore,
         sleepScore: todaySleepScore,
         strainScore: strainResult.strainScore,
-        readinessScore: Math.round((recoveryResult.recoveryScore + todaySleepScore) / 2), // Simplified readiness
-      },
-      status: recoveryResult.category.charAt(0).toUpperCase() + recoveryResult.category.slice(1),
+        readinessScore,
+      } : null,
+      hasEnoughData: recoveryResult.hasEnoughData,
+      status: formattedStatus,
       recommendation: recoveryResult.recommendation,
       trainingRecommendation: recoveryResult.trainingRecommendation,
       trend: trendData.slice(0, days),

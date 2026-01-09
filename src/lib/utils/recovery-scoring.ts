@@ -66,17 +66,18 @@ export interface StrainResult {
 }
 
 export interface RecoveryResult {
-  recoveryScore: number; // 0-100 scale
-  category: "optimal" | "good" | "moderate" | "low";
+  recoveryScore: number | null; // 0-100 scale, null if insufficient data
+  category: "optimal" | "good" | "moderate" | "low" | "insufficient_data";
   components: {
-    sleepQuality: { score: number; weight: number };
-    hrvStatus: { score: number; weight: number; zScore: number | null };
-    restingHrStatus: { score: number; weight: number; zScore: number | null };
-    strainImpact: { score: number; weight: number };
-    sleepConsistency: { score: number; weight: number };
+    sleepQuality: { score: number | null; weight: number; hasData: boolean };
+    hrvStatus: { score: number | null; weight: number; zScore: number | null; hasData: boolean };
+    restingHrStatus: { score: number | null; weight: number; zScore: number | null; hasData: boolean };
+    strainImpact: { score: number | null; weight: number; hasData: boolean };
+    sleepConsistency: { score: number | null; weight: number; hasData: boolean };
   };
   recommendation: string;
   trainingRecommendation: string;
+  hasEnoughData: boolean;
 }
 
 // ============================================================================
@@ -375,100 +376,112 @@ function zScoreToScore(zScore: number, invert: boolean = false): number {
 
 /**
  * Score sleep quality component (already evidence-based from PSQI)
+ * Returns null if no sleep data available
  */
-function scoreSleepQuality(sleepScore: number): number {
+function scoreSleepQuality(sleepScore: number | null): { score: number | null; hasData: boolean } {
+  if (sleepScore === null || sleepScore === 0) {
+    return { score: null, hasData: false };
+  }
   // Sleep score is already 0-100, just pass through
-  return Math.min(100, Math.max(0, sleepScore));
+  return { score: Math.min(100, Math.max(0, sleepScore)), hasData: true };
 }
 
 /**
  * Score HRV status compared to personal baseline
  * Higher HRV generally indicates better parasympathetic tone / recovery
+ * Returns null score if no HRV data available
  */
 function scoreHrvStatus(
   hrvValue: number | null,
   baseline: RecoveryBaseline | null
-): { score: number; zScore: number | null } {
+): { score: number | null; zScore: number | null; hasData: boolean } {
   if (hrvValue === null) {
-    return { score: 75, zScore: null }; // Neutral if no data
+    return { score: null, zScore: null, hasData: false };
   }
 
   if (baseline === null) {
     // Population-based scoring when no personal baseline
     // Based on general adult HRV norms during sleep (typically 40-80ms)
-    if (hrvValue >= 70) return { score: 95, zScore: null };
-    if (hrvValue >= 55) return { score: 85, zScore: null };
-    if (hrvValue >= 40) return { score: 70, zScore: null };
-    if (hrvValue >= 30) return { score: 55, zScore: null };
-    return { score: 40, zScore: null };
+    if (hrvValue >= 70) return { score: 95, zScore: null, hasData: true };
+    if (hrvValue >= 55) return { score: 85, zScore: null, hasData: true };
+    if (hrvValue >= 40) return { score: 70, zScore: null, hasData: true };
+    if (hrvValue >= 30) return { score: 55, zScore: null, hasData: true };
+    return { score: 40, zScore: null, hasData: true };
   }
 
   // Personal baseline comparison
   const zScore = calculateZScore(hrvValue, baseline.hrvAvg, baseline.hrvStdDev);
   const score = zScoreToScore(zScore, false);
 
-  return { score, zScore: Math.round(zScore * 100) / 100 };
+  return { score, zScore: Math.round(zScore * 100) / 100, hasData: true };
 }
 
 /**
  * Score resting HR status compared to personal baseline
  * Lower resting HR generally indicates better cardiovascular fitness/recovery
+ * Returns null score if no resting HR data available
  */
 function scoreRestingHrStatus(
   restingHr: number | null,
   baseline: RecoveryBaseline | null
-): { score: number; zScore: number | null } {
+): { score: number | null; zScore: number | null; hasData: boolean } {
   if (restingHr === null) {
-    return { score: 75, zScore: null };
+    return { score: null, zScore: null, hasData: false };
   }
 
   if (baseline === null) {
     // Population-based scoring
     // Average adult resting HR: 60-80 bpm, athletic: 40-60 bpm
-    if (restingHr <= 50) return { score: 95, zScore: null };
-    if (restingHr <= 60) return { score: 85, zScore: null };
-    if (restingHr <= 70) return { score: 70, zScore: null };
-    if (restingHr <= 80) return { score: 55, zScore: null };
-    return { score: 40, zScore: null };
+    if (restingHr <= 50) return { score: 95, zScore: null, hasData: true };
+    if (restingHr <= 60) return { score: 85, zScore: null, hasData: true };
+    if (restingHr <= 70) return { score: 70, zScore: null, hasData: true };
+    if (restingHr <= 80) return { score: 55, zScore: null, hasData: true };
+    return { score: 40, zScore: null, hasData: true };
   }
 
   // Personal baseline comparison (invert because lower is better)
   const zScore = calculateZScore(restingHr, baseline.restingHrAvg, baseline.restingHrStdDev);
   const score = zScoreToScore(zScore, true); // Inverted
 
-  return { score, zScore: Math.round(zScore * 100) / 100 };
+  return { score, zScore: Math.round(zScore * 100) / 100, hasData: true };
 }
 
 /**
  * Score impact of previous day's strain on recovery
  * Higher strain = lower recovery (inverse relationship)
+ * Strain of 0 (rest day) is valid data, so always hasData: true
  */
-function scoreStrainImpact(strain: number): number {
+function scoreStrainImpact(strain: number): { score: number; hasData: boolean } {
   // Strain 0-21 scale
   // Low strain (0-5): minimal impact on recovery → score 90-100
   // Moderate (5-12): some impact → score 60-90
   // High (12-18): significant impact → score 30-60
   // Max (18-21): major impact → score 0-30
 
-  if (strain <= 3) return 100;
-  if (strain <= 6) return 90;
-  if (strain <= 9) return 75;
-  if (strain <= 12) return 60;
-  if (strain <= 15) return 45;
-  if (strain <= 18) return 30;
-  return 15;
+  let score: number;
+  if (strain <= 3) score = 100;
+  else if (strain <= 6) score = 90;
+  else if (strain <= 9) score = 75;
+  else if (strain <= 12) score = 60;
+  else if (strain <= 15) score = 45;
+  else if (strain <= 18) score = 30;
+  else score = 15;
+
+  // Strain of 0 means rest day - this is valid data
+  return { score, hasData: true };
 }
 
 /**
  * Score sleep consistency (bedtime regularity)
  * Consistent sleep times support circadian rhythm health
+ * Returns null score if no sleep data available
  */
 function scoreSleepConsistency(
   todayBedtimeMinutes: number | null,
   baseline: RecoveryBaseline | null
-): number {
+): { score: number | null; hasData: boolean } {
   if (todayBedtimeMinutes === null || baseline === null) {
-    return 75; // Neutral if no data
+    return { score: null, hasData: false };
   }
 
   // Calculate deviation from average bedtime
@@ -484,40 +497,90 @@ function scoreSleepConsistency(
   // 15-30 min: good
   // 30-60 min: moderate
   // >60 min: poor
-  if (deviation <= 15) return 100;
-  if (deviation <= 30) return 85;
-  if (deviation <= 45) return 70;
-  if (deviation <= 60) return 55;
-  if (deviation <= 90) return 40;
-  return 25;
+  let score: number;
+  if (deviation <= 15) score = 100;
+  else if (deviation <= 30) score = 85;
+  else if (deviation <= 45) score = 70;
+  else if (deviation <= 60) score = 55;
+  else if (deviation <= 90) score = 40;
+  else score = 25;
+
+  return { score, hasData: true };
 }
 
 /**
  * Main recovery calculation function
+ * Returns null recovery score if insufficient data (need at least sleep data)
  */
 export function calculateRecovery(inputs: RecoveryInputs): RecoveryResult {
   // Calculate each component
-  const sleepQualityScore = scoreSleepQuality(inputs.sleepScore);
+  const sleepQualityResult = scoreSleepQuality(inputs.sleepScore);
   const hrvResult = scoreHrvStatus(inputs.hrvValue, inputs.baseline);
   const restingHrResult = scoreRestingHrStatus(inputs.restingHr, inputs.baseline);
-  const strainImpactScore = scoreStrainImpact(inputs.previousDayStrain);
-  const sleepConsistencyScore = scoreSleepConsistency(
+  const strainImpactResult = scoreStrainImpact(inputs.previousDayStrain);
+  const sleepConsistencyResult = scoreSleepConsistency(
     inputs.bedtimeMinutes,
     inputs.baseline
   );
 
-  // Calculate weighted total
-  const recoveryScore = Math.round(
-    sleepQualityScore * RECOVERY_WEIGHTS.sleepQuality +
-    hrvResult.score * RECOVERY_WEIGHTS.hrvStatus +
-    restingHrResult.score * RECOVERY_WEIGHTS.restingHrStatus +
-    strainImpactScore * RECOVERY_WEIGHTS.strainImpact +
-    sleepConsistencyScore * RECOVERY_WEIGHTS.sleepConsistency
-  );
+  // Build components object
+  const components = {
+    sleepQuality: { score: sleepQualityResult.score, weight: RECOVERY_WEIGHTS.sleepQuality, hasData: sleepQualityResult.hasData },
+    hrvStatus: { score: hrvResult.score, weight: RECOVERY_WEIGHTS.hrvStatus, zScore: hrvResult.zScore, hasData: hrvResult.hasData },
+    restingHrStatus: { score: restingHrResult.score, weight: RECOVERY_WEIGHTS.restingHrStatus, zScore: restingHrResult.zScore, hasData: restingHrResult.hasData },
+    strainImpact: { score: strainImpactResult.score, weight: RECOVERY_WEIGHTS.strainImpact, hasData: strainImpactResult.hasData },
+    sleepConsistency: { score: sleepConsistencyResult.score, weight: RECOVERY_WEIGHTS.sleepConsistency, hasData: sleepConsistencyResult.hasData },
+  };
+
+  // Check if we have enough data to calculate a meaningful recovery score
+  // Require at least sleep data (the most important factor at 35%)
+  const hasEnoughData = sleepQualityResult.hasData;
+
+  // If no sleep data, we can't calculate a meaningful recovery score
+  if (!hasEnoughData) {
+    return {
+      recoveryScore: null,
+      category: "insufficient_data",
+      components,
+      recommendation: "No sleep data available. Wear your device tonight to track recovery.",
+      trainingRecommendation: "Unable to provide recommendations without sleep data.",
+      hasEnoughData: false,
+    };
+  }
+
+  // Calculate weighted total, only using components that have data
+  // Re-normalize weights based on available data
+  let totalWeight = 0;
+  let weightedSum = 0;
+
+  if (sleepQualityResult.hasData && sleepQualityResult.score !== null) {
+    weightedSum += sleepQualityResult.score * RECOVERY_WEIGHTS.sleepQuality;
+    totalWeight += RECOVERY_WEIGHTS.sleepQuality;
+  }
+  if (hrvResult.hasData && hrvResult.score !== null) {
+    weightedSum += hrvResult.score * RECOVERY_WEIGHTS.hrvStatus;
+    totalWeight += RECOVERY_WEIGHTS.hrvStatus;
+  }
+  if (restingHrResult.hasData && restingHrResult.score !== null) {
+    weightedSum += restingHrResult.score * RECOVERY_WEIGHTS.restingHrStatus;
+    totalWeight += RECOVERY_WEIGHTS.restingHrStatus;
+  }
+  if (strainImpactResult.hasData && strainImpactResult.score !== null) {
+    weightedSum += strainImpactResult.score * RECOVERY_WEIGHTS.strainImpact;
+    totalWeight += RECOVERY_WEIGHTS.strainImpact;
+  }
+  if (sleepConsistencyResult.hasData && sleepConsistencyResult.score !== null) {
+    weightedSum += sleepConsistencyResult.score * RECOVERY_WEIGHTS.sleepConsistency;
+    totalWeight += RECOVERY_WEIGHTS.sleepConsistency;
+  }
+
+  // Normalize to 0-100 scale
+  const recoveryScore = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : null;
 
   // Determine category
   let category: RecoveryResult["category"];
-  if (recoveryScore >= 85) category = "optimal";
+  if (recoveryScore === null) category = "insufficient_data";
+  else if (recoveryScore >= 85) category = "optimal";
   else if (recoveryScore >= 70) category = "good";
   else if (recoveryScore >= 50) category = "moderate";
   else category = "low";
@@ -528,6 +591,7 @@ export function calculateRecovery(inputs: RecoveryInputs): RecoveryResult {
     good: "You're well recovered. Moderate to high intensity training is appropriate.",
     moderate: "Recovery is incomplete. Consider lighter training or active recovery.",
     low: "Your body needs rest. Light stretching or complete rest recommended.",
+    insufficient_data: "Insufficient data to calculate recovery. Wear your device tonight.",
   };
 
   const trainingRecs: Record<string, string> = {
@@ -535,20 +599,16 @@ export function calculateRecovery(inputs: RecoveryInputs): RecoveryResult {
     good: "Tempo runs, moderate weights, skill work, games",
     moderate: "Easy cardio, light weights, mobility, technique",
     low: "Rest, gentle stretching, walking, sleep focus",
+    insufficient_data: "Unable to provide recommendations without sufficient data.",
   };
 
   return {
     recoveryScore,
     category,
-    components: {
-      sleepQuality: { score: sleepQualityScore, weight: RECOVERY_WEIGHTS.sleepQuality },
-      hrvStatus: { score: hrvResult.score, weight: RECOVERY_WEIGHTS.hrvStatus, zScore: hrvResult.zScore },
-      restingHrStatus: { score: restingHrResult.score, weight: RECOVERY_WEIGHTS.restingHrStatus, zScore: restingHrResult.zScore },
-      strainImpact: { score: strainImpactScore, weight: RECOVERY_WEIGHTS.strainImpact },
-      sleepConsistency: { score: sleepConsistencyScore, weight: RECOVERY_WEIGHTS.sleepConsistency },
-    },
+    components,
     recommendation: recommendations[category],
     trainingRecommendation: trainingRecs[category],
+    hasEnoughData,
   };
 }
 

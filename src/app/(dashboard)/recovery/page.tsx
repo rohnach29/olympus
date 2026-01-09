@@ -24,6 +24,7 @@ interface RecoveryData {
     strainScore: number;
     readinessScore: number;
   } | null;
+  hasEnoughData: boolean;
   status: string;
   recommendation: string;
   trainingRecommendation?: string;
@@ -42,10 +43,11 @@ interface RecoveryData {
   };
   factors: {
     name: string;
-    score: number;
+    score: number | null;
     weight?: string;
     impact: string;
     zScore?: number | null;
+    hasData: boolean;
   }[];
   baseline?: {
     hrvAvg: number;
@@ -116,7 +118,8 @@ export default function RecoveryPage() {
     );
   }
 
-  if (!data || !data.today) {
+  // Handle case where API returned no data at all
+  if (!data) {
     return (
       <div className="space-y-6">
         <div>
@@ -138,8 +141,10 @@ export default function RecoveryPage() {
     );
   }
 
-  const recoveryScore = data.today.recoveryScore;
-  const trainingTags = getTrainingTags(recoveryScore);
+  // Check if we have enough data for a meaningful recovery score
+  const hasEnoughData = data.hasEnoughData ?? false;
+  const recoveryScore = data.today?.recoveryScore ?? null;
+  const trainingTags = recoveryScore !== null ? getTrainingTags(recoveryScore) : [];
 
   // Prepare trend data - ensure we have 7 days
   const trendData = data.trend.slice(0, 7);
@@ -158,13 +163,31 @@ export default function RecoveryPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="md:col-span-1">
           <CardContent className="p-6 flex flex-col items-center justify-center min-h-[250px]">
-            <ScoreRing score={recoveryScore} size="lg" label="Recovery Score" />
-            <div className="mt-4 text-center">
-              <p className="font-medium text-lg">{data.status}</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {data.recommendation}
-              </p>
-            </div>
+            {hasEnoughData && recoveryScore !== null ? (
+              <>
+                <ScoreRing score={recoveryScore} size="lg" label="Recovery Score" />
+                <div className="mt-4 text-center">
+                  <p className="font-medium text-lg">{data.status}</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {data.recommendation}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="relative">
+                  <div className="w-32 h-32 rounded-full border-8 border-muted flex items-center justify-center">
+                    <span className="text-2xl text-muted-foreground">--</span>
+                  </div>
+                </div>
+                <div className="mt-4 text-center">
+                  <p className="font-medium text-lg text-muted-foreground">No Data</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {data.recommendation}
+                  </p>
+                </div>
+              </>
+            )}
             {/* Info Button */}
             <Button
               variant="ghost"
@@ -204,33 +227,50 @@ export default function RecoveryPage() {
                         )}
                       </span>
                       <span className="text-sm text-muted-foreground">
-                        {factor.score}%
-                        {factor.zScore !== undefined && factor.zScore !== null && (
-                          <span className="text-xs ml-1">
-                            (z: {factor.zScore > 0 ? "+" : ""}{factor.zScore})
-                          </span>
+                        {factor.hasData && factor.score !== null ? (
+                          <>
+                            {factor.score}%
+                            {factor.zScore !== undefined && factor.zScore !== null && (
+                              <span className="text-xs ml-1">
+                                (z: {factor.zScore > 0 ? "+" : ""}{factor.zScore})
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground/60 italic">No data</span>
                         )}
                       </span>
                     </div>
                     <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${
-                          factor.impact === "positive"
-                            ? "bg-green-500"
-                            : factor.impact === "negative"
-                            ? "bg-red-500"
-                            : "bg-yellow-500"
-                        }`}
-                        style={{ width: `${factor.score}%` }}
-                      />
+                      {factor.hasData && factor.score !== null ? (
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            factor.impact === "positive"
+                              ? "bg-green-500"
+                              : factor.impact === "negative"
+                              ? "bg-red-500"
+                              : "bg-yellow-500"
+                          }`}
+                          style={{ width: `${factor.score}%` }}
+                        />
+                      ) : (
+                        <div
+                          className="h-full rounded-full bg-muted-foreground/20"
+                          style={{ width: "100%" }}
+                        />
+                      )}
                     </div>
                   </div>
-                  {factor.impact === "positive" ? (
-                    <TrendingUp className="h-4 w-4 text-green-500" />
-                  ) : factor.impact === "negative" ? (
-                    <TrendingDown className="h-4 w-4 text-red-500" />
+                  {factor.hasData ? (
+                    factor.impact === "positive" ? (
+                      <TrendingUp className="h-4 w-4 text-green-500" />
+                    ) : factor.impact === "negative" ? (
+                      <TrendingDown className="h-4 w-4 text-red-500" />
+                    ) : (
+                      <Activity className="h-4 w-4 text-yellow-500" />
+                    )
                   ) : (
-                    <Activity className="h-4 w-4 text-yellow-500" />
+                    <Activity className="h-4 w-4 text-muted-foreground/30" />
                   )}
                 </div>
               ))}
@@ -382,35 +422,43 @@ export default function RecoveryPage() {
       </Card>
 
       {/* Training Recommendation */}
-      <Card className="bg-primary/5 border-primary/20">
+      <Card className={hasEnoughData ? "bg-primary/5 border-primary/20" : "bg-muted/50 border-muted"}>
         <CardContent className="p-6">
           <div className="flex items-start gap-4">
-            <div className="p-3 rounded-xl bg-primary/10">
-              <Activity className="h-6 w-6 text-primary" />
+            <div className={`p-3 rounded-xl ${hasEnoughData ? "bg-primary/10" : "bg-muted"}`}>
+              <Activity className={`h-6 w-6 ${hasEnoughData ? "text-primary" : "text-muted-foreground"}`} />
             </div>
             <div>
               <h3 className="font-semibold text-lg">
                 Today&apos;s Training Recommendation
               </h3>
-              <p className="text-muted-foreground mt-1">
-                Based on your recovery score of {recoveryScore}%,{" "}
-                {data.recommendation.toLowerCase()}
-              </p>
-              {data.trainingRecommendation && (
-                <p className="text-sm text-muted-foreground mt-2">
-                  <strong>Suggested:</strong> {data.trainingRecommendation}
+              {hasEnoughData && recoveryScore !== null ? (
+                <>
+                  <p className="text-muted-foreground mt-1">
+                    Based on your recovery score of {recoveryScore}%,{" "}
+                    {data.recommendation.toLowerCase()}
+                  </p>
+                  {data.trainingRecommendation && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      <strong>Suggested:</strong> {data.trainingRecommendation}
+                    </p>
+                  )}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {trainingTags.map((tag) => (
+                      <span
+                        key={tag.label}
+                        className={`px-3 py-1 rounded-full text-sm font-medium ${tag.color}`}
+                      >
+                        {tag.label}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="text-muted-foreground mt-1">
+                  {data.recommendation}
                 </p>
               )}
-              <div className="mt-4 flex flex-wrap gap-2">
-                {trainingTags.map((tag) => (
-                  <span
-                    key={tag.label}
-                    className={`px-3 py-1 rounded-full text-sm font-medium ${tag.color}`}
-                  >
-                    {tag.label}
-                  </span>
-                ))}
-              </div>
             </div>
           </div>
         </CardContent>
