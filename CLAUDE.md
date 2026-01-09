@@ -32,6 +32,22 @@ npm run db:migrate    # Run migrations
 npm run db:studio     # Open Drizzle Studio GUI
 ```
 
+### When to run `db:push`
+
+Only run `npm run db:push` when you modify `src/lib/db/schema.ts` table definitions:
+
+| Change | Need `db:push`? |
+|--------|-----------------|
+| Add/remove/rename a column | Yes |
+| Change column type | Yes |
+| Add a new table | Yes |
+| Add/change an index | Yes |
+| Change TypeScript interfaces | No |
+| Change API routes or logic | No |
+| Change mappers/processors | No |
+
+**Mental model:** `db:push` syncs your schema code → actual database tables. If you only changed *how* you process data (not *where* it's stored), the database doesn't need to know.
+
 ## Architecture Overview
 
 Olympus is a health and longevity tracking platform built with Next.js 16 (App Router), PostgreSQL, and Drizzle ORM.
@@ -92,4 +108,32 @@ LLM (optional):
 - `OLLAMA_HOST` - Default: `http://localhost:11434`
 - `OLLAMA_MODEL` - Default: `deepseek-r1:7b`
 - `GROQ_API_KEY` - For production deployments
+
+## Health Auto Export Integration
+
+Webhook endpoint for ingesting data from the Health Auto Export iOS app.
+
+### Webhook URL
+`POST /api/webhooks/health-auto-export`
+
+### Authentication
+Bearer token in Authorization header. Tokens managed via `/api/integrations/tokens`.
+
+### What it processes
+- **Health metrics**: steps, heart rate, HRV, calories, etc.
+- **Sleep sessions**: extracted from sleep_analysis metrics
+- **Workouts**: with heart rate data (Avg/Min/Max per sample)
+
+### Key files
+- `src/app/api/webhooks/health-auto-export/route.ts` - Webhook endpoint
+- `src/lib/webhooks/health-auto-export/processor.ts` - Processing logic
+- `src/lib/webhooks/health-auto-export/mappers.ts` - Data transformation
+- `src/lib/webhooks/health-auto-export/types.ts` - Type definitions
+
+### Idempotency
+Uses `webhook_logs` table to prevent duplicate processing. If re-importing the same data, delete the corresponding webhook_logs entry first.
+
+### Health Auto Export data formats
+- **Heart rate in workouts**: `{ Avg, Min, Max, date, units, source }` per sample (not `{ qty }`)
+- **Sleep durations**: Sent in hours, converted to minutes in mapper
 
