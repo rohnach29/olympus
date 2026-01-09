@@ -91,12 +91,13 @@ export default async function DashboardPage() {
       // Fetch point-in-time metrics for TODAY only (most recent value of EACH type)
       // Using DISTINCT ON to get one record per metric type (the most recent one today)
       // This ensures we don't show stale data from previous days
+      const todayISO = today.toISOString(); // Convert to ISO string for raw SQL
       const pointInTimeMetrics = await db.execute(sql`
         SELECT DISTINCT ON (metric_type) *
         FROM health_metrics
         WHERE user_id = ${user.id}
           AND metric_type IN ('resting_heart_rate', 'hrv', 'respiratory_rate', 'blood_oxygen')
-          AND recorded_at >= ${today}
+          AND recorded_at >= ${todayISO}::timestamp
         ORDER BY metric_type, recorded_at DESC
       `) as unknown as Array<{ metric_type: string; value: string }>;
 
