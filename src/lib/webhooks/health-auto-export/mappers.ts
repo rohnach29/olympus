@@ -166,15 +166,23 @@ export function mapWorkoutToOlympus(
   const type = WORKOUT_TYPE_MAP[workout.name] || "other";
 
   // Extract heart rate data if available
+  // Filter out invalid values (undefined, null, NaN) to prevent database errors
   let heartRateAvg: number | null = null;
   let heartRateMax: number | null = null;
 
   if (workout.heartRateData && workout.heartRateData.length > 0) {
-    const hrValues = workout.heartRateData.map((hr) => hr.qty);
-    heartRateAvg = Math.round(
-      hrValues.reduce((a, b) => a + b, 0) / hrValues.length
-    );
-    heartRateMax = Math.max(...hrValues);
+    const hrValues = workout.heartRateData
+      .map((hr) => hr.qty)
+      .filter((val): val is number => typeof val === "number" && !isNaN(val) && isFinite(val));
+
+    if (hrValues.length > 0) {
+      const avg = hrValues.reduce((a, b) => a + b, 0) / hrValues.length;
+      const max = Math.max(...hrValues);
+
+      // Only assign if the calculations produced valid numbers
+      heartRateAvg = !isNaN(avg) && isFinite(avg) ? Math.round(avg) : null;
+      heartRateMax = !isNaN(max) && isFinite(max) ? Math.round(max) : null;
+    }
   }
 
   // Extract calories
