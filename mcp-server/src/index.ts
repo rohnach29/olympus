@@ -741,6 +741,512 @@ async function getFoodPortions(foodId: string) {
 }
 
 // ============================================================================
+// BLOOD WORK TOOLS
+// ============================================================================
+
+interface BloodWorkMarker {
+  name: string;
+  value: number;
+  unit: string;
+  category?: string;
+  referenceMin?: number;
+  referenceMax?: number;
+}
+
+async function getBloodWorkResults(limit: number = 5) {
+  const results = await sql`
+    SELECT
+      id,
+      test_date,
+      lab_name,
+      markers,
+      created_at
+    FROM blood_work
+    WHERE user_id = ${USER_ID}
+    ORDER BY test_date DESC
+    LIMIT ${limit}
+  `;
+
+  if (results.length === 0) {
+    return {
+      message: "No blood work results found. Upload results via the Olympus web app.",
+      results: [],
+    };
+  }
+
+  return {
+    count: results.length,
+    results: results.map(r => {
+      const row = r as {
+        id: string;
+        test_date: string;
+        lab_name: string | null;
+        markers: BloodWorkMarker[];
+        created_at: Date;
+      };
+      const markers = row.markers || [];
+
+      // Group markers by category
+      const byCategory: Record<string, BloodWorkMarker[]> = {};
+      for (const m of markers) {
+        const cat = m.category || "other";
+        if (!byCategory[cat]) byCategory[cat] = [];
+        byCategory[cat].push(m);
+      }
+
+      return {
+        id: row.id,
+        testDate: row.test_date,
+        labName: row.lab_name,
+        markerCount: markers.length,
+        markers: byCategory,
+      };
+    }),
+  };
+}
+
+async function getBloodWorkById(resultId: string) {
+  const results = await sql`
+    SELECT
+      id,
+      test_date,
+      lab_name,
+      markers,
+      created_at
+    FROM blood_work
+    WHERE id = ${resultId}
+      AND user_id = ${USER_ID}
+    LIMIT 1
+  `;
+
+  if (results.length === 0) {
+    return { error: "Blood work result not found" };
+  }
+
+  const row = results[0] as {
+    id: string;
+    test_date: string;
+    lab_name: string | null;
+    markers: BloodWorkMarker[];
+    created_at: Date;
+  };
+
+  return {
+    id: row.id,
+    testDate: row.test_date,
+    labName: row.lab_name,
+    markers: row.markers || [],
+  };
+}
+
+async function addBloodWorkMarker(
+  resultId: string,
+  marker: { name: string; value: number; unit: string; category?: string; referenceMin?: number; referenceMax?: number }
+) {
+  // Get existing result
+  const results = await sql`
+    SELECT markers FROM blood_work
+    WHERE id = ${resultId} AND user_id = ${USER_ID}
+  `;
+
+  if (results.length === 0) {
+    return { success: false, error: "Blood work result not found" };
+  }
+
+  const existingMarkers = (results[0] as { markers: BloodWorkMarker[] }).markers || [];
+
+  // Check if marker already exists
+  const existingIdx = existingMarkers.findIndex(m => m.name.toLowerCase() === marker.name.toLowerCase());
+  if (existingIdx >= 0) {
+    return {
+      success: false,
+      error: `Marker "${marker.name}" already exists. Use edit_blood_work_marker to update it.`,
+    };
+  }
+
+  // Add new marker
+  const newMarkers = [...existingMarkers, {
+    name: marker.name,
+    value: marker.value,
+    unit: marker.unit,
+    category: marker.category || "other",
+    ...(marker.referenceMin !== undefined && { referenceMin: marker.referenceMin }),
+    ...(marker.referenceMax !== undefined && { referenceMax: marker.referenceMax }),
+  }];
+
+  await sql`
+    UPDATE blood_work
+    SET markers = ${JSON.stringify(newMarkers)}::jsonb
+    WHERE id = ${resultId}
+  `;
+
+  return {
+    success: true,
+    message: `Added marker "${marker.name}" with value ${marker.value} ${marker.unit}`,
+    markerCount: newMarkers.length,
+  };
+}
+
+async function editBloodWorkMarker(
+  resultId: string,
+  markerName: string,
+  updates: { value?: number; unit?: string; name?: string; referenceMin?: number; referenceMax?: number }
+) {
+  // Get existing result
+  const results = await sql`
+    SELECT markers FROM blood_work
+    WHERE id = ${resultId} AND user_id = ${USER_ID}
+  `;
+
+  if (results.length === 0) {
+    return { success: false, error: "Blood work result not found" };
+  }
+
+  const existingMarkers = (results[0] as { markers: BloodWorkMarker[] }).markers || [];
+
+  // Find the marker to edit
+  const markerIdx = existingMarkers.findIndex(m => m.name.toLowerCase() === markerName.toLowerCase());
+  if (markerIdx < 0) {
+    return {
+      success: false,
+      error: `Marker "${markerName}" not found. Available markers: ${existingMarkers.map(m => m.name).join(", ")}`,
+    };
+  }
+
+  // Update the marker
+  const oldMarker = existingMarkers[markerIdx];
+  const updatedMarker = {
+    ...oldMarker,
+    ...(updates.name !== undefined && { name: updates.name }),
+    ...(updates.value !== undefined && { value: updates.value }),
+    ...(updates.unit !== undefined && { unit: updates.unit }),
+    ...(updates.referenceMin !== undefined && { referenceMin: updates.referenceMin }),
+    ...(updates.referenceMax !== undefined && { referenceMax: updates.referenceMax }),
+  };
+
+  const newMarkers = [...existingMarkers];
+  newMarkers[markerIdx] = updatedMarker;
+
+  await sql`
+    UPDATE blood_work
+    SET markers = ${JSON.stringify(newMarkers)}::jsonb
+    WHERE id = ${resultId}
+  `;
+
+  return {
+    success: true,
+    message: `Updated marker "${markerName}"`,
+    before: oldMarker,
+    after: updatedMarker,
+  };
+}
+
+async function deleteBloodWorkMarker(resultId: string, markerName: string) {
+  // Get existing result
+  const results = await sql`
+    SELECT markers FROM blood_work
+    WHERE id = ${resultId} AND user_id = ${USER_ID}
+  `;
+
+  if (results.length === 0) {
+    return { success: false, error: "Blood work result not found" };
+  }
+
+  const existingMarkers = (results[0] as { markers: BloodWorkMarker[] }).markers || [];
+
+  // Find and remove the marker
+  const markerIdx = existingMarkers.findIndex(m => m.name.toLowerCase() === markerName.toLowerCase());
+  if (markerIdx < 0) {
+    return {
+      success: false,
+      error: `Marker "${markerName}" not found. Available markers: ${existingMarkers.map(m => m.name).join(", ")}`,
+    };
+  }
+
+  const deletedMarker = existingMarkers[markerIdx];
+  const newMarkers = existingMarkers.filter((_, idx) => idx !== markerIdx);
+
+  await sql`
+    UPDATE blood_work
+    SET markers = ${JSON.stringify(newMarkers)}::jsonb
+    WHERE id = ${resultId}
+  `;
+
+  return {
+    success: true,
+    message: `Deleted marker "${markerName}"`,
+    deleted: deletedMarker,
+    remainingCount: newMarkers.length,
+  };
+}
+
+// ============================================================================
+// LONGEVITY TOOLS
+// ============================================================================
+
+// PhenoAge coefficients from Levine 2018
+const PHENO_AGE_COEFFICIENTS = {
+  intercept: -19.9067,
+  albumin: -0.0336,
+  creatinine: 0.0095,
+  glucose: 0.1953,
+  lnCrp: 0.0954,
+  lymphocytePercent: -0.0120,
+  mcv: 0.0268,
+  rdw: 0.3306,
+  alkalinePhosphatase: 0.0019,
+  wbc: 0.0554,
+  age: 0.0804,
+};
+
+interface PhenoAgeInput {
+  chronologicalAge: number;
+  albumin?: number;
+  creatinine?: number;
+  glucose?: number;
+  crp?: number;
+  lymphocytePercent?: number;
+  mcv?: number;
+  rdw?: number;
+  alkalinePhosphatase?: number;
+  wbc?: number;
+}
+
+function calculatePhenoAgeDirect(input: PhenoAgeInput): { biologicalAge: number | null; missingMarkers: string[] } {
+  const missingMarkers: string[] = [];
+
+  if (input.albumin === undefined) missingMarkers.push("Albumin");
+  if (input.creatinine === undefined) missingMarkers.push("Creatinine");
+  if (input.glucose === undefined) missingMarkers.push("Fasting Glucose");
+  if (input.crp === undefined) missingMarkers.push("hs-CRP");
+  if (input.lymphocytePercent === undefined) missingMarkers.push("Lymphocyte %");
+  if (input.mcv === undefined) missingMarkers.push("MCV");
+  if (input.rdw === undefined) missingMarkers.push("RDW");
+  if (input.alkalinePhosphatase === undefined) missingMarkers.push("Alkaline Phosphatase");
+  if (input.wbc === undefined) missingMarkers.push("WBC");
+
+  if (missingMarkers.length > 0) {
+    return { biologicalAge: null, missingMarkers };
+  }
+
+  // Unit conversions
+  const albumin_gL = input.albumin! * 10;
+  const creatinine_umolL = input.creatinine! * 88.4;
+  const glucose_mmolL = input.glucose! * 0.0555;
+  const lnCrp = Math.log(Math.max(input.crp!, 0.1));
+
+  // Calculate linear predictor
+  const xb =
+    PHENO_AGE_COEFFICIENTS.intercept +
+    PHENO_AGE_COEFFICIENTS.albumin * albumin_gL +
+    PHENO_AGE_COEFFICIENTS.creatinine * creatinine_umolL +
+    PHENO_AGE_COEFFICIENTS.glucose * glucose_mmolL +
+    PHENO_AGE_COEFFICIENTS.lnCrp * lnCrp +
+    PHENO_AGE_COEFFICIENTS.lymphocytePercent * input.lymphocytePercent! +
+    PHENO_AGE_COEFFICIENTS.mcv * input.mcv! +
+    PHENO_AGE_COEFFICIENTS.rdw * input.rdw! +
+    PHENO_AGE_COEFFICIENTS.alkalinePhosphatase * input.alkalinePhosphatase! +
+    PHENO_AGE_COEFFICIENTS.wbc * input.wbc! +
+    PHENO_AGE_COEFFICIENTS.age * input.chronologicalAge;
+
+  const gamma = 0.0076927;
+  const mortalityScore = 1 - Math.exp(-Math.exp(xb) * (Math.exp(120 * gamma) - 1) / gamma);
+  const biologicalAge = 141.50225 + Math.log(-0.00553 * Math.log(1 - mortalityScore)) / 0.090165;
+
+  return {
+    biologicalAge: Math.round(Math.max(20, Math.min(120, biologicalAge)) * 10) / 10,
+    missingMarkers: [],
+  };
+}
+
+async function getLongevityMetrics() {
+  // Get user's date of birth for chronological age
+  const userResult = await sql`
+    SELECT date_of_birth FROM users WHERE id = ${USER_ID}
+  `;
+
+  if (userResult.length === 0 || !userResult[0].date_of_birth) {
+    return {
+      error: "Please set your date of birth in settings to calculate biological age.",
+    };
+  }
+
+  const dob = new Date(userResult[0].date_of_birth as string);
+  const today = new Date();
+  let chronologicalAge = today.getFullYear() - dob.getFullYear();
+  const monthDiff = today.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+    chronologicalAge--;
+  }
+
+  // Get latest blood work
+  const bloodWorkResult = await sql`
+    SELECT markers, test_date, lab_name
+    FROM blood_work
+    WHERE user_id = ${USER_ID}
+    ORDER BY test_date DESC
+    LIMIT 1
+  `;
+
+  if (bloodWorkResult.length === 0) {
+    return {
+      chronologicalAge,
+      biologicalAge: null,
+      message: "No blood work data. Upload blood work results to calculate biological age.",
+      requiredMarkers: ["Albumin", "Creatinine", "Fasting Glucose", "hs-CRP", "Lymphocyte %", "MCV", "RDW", "Alkaline Phosphatase", "WBC"],
+    };
+  }
+
+  const markers = (bloodWorkResult[0] as { markers: BloodWorkMarker[] }).markers || [];
+  const testDate = (bloodWorkResult[0] as { test_date: string }).test_date;
+  const labName = (bloodWorkResult[0] as { lab_name: string | null }).lab_name;
+
+  // Map markers to PhenoAge input
+  const markerMappings: Record<string, keyof PhenoAgeInput> = {
+    albumin: "albumin",
+    creatinine: "creatinine",
+    glucose: "glucose",
+    "fasting glucose": "glucose",
+    crp: "crp",
+    "hs-crp": "crp",
+    lymphocyte: "lymphocytePercent",
+    "lymphocyte %": "lymphocytePercent",
+    mcv: "mcv",
+    rdw: "rdw",
+    "alkaline phosphatase": "alkalinePhosphatase",
+    alp: "alkalinePhosphatase",
+    wbc: "wbc",
+  };
+
+  const phenoInput: PhenoAgeInput = { chronologicalAge };
+
+  for (const marker of markers) {
+    const normalizedName = marker.name.toLowerCase().trim();
+    for (const [pattern, field] of Object.entries(markerMappings)) {
+      if (normalizedName.includes(pattern) || normalizedName === pattern) {
+        (phenoInput as unknown as Record<string, number | undefined>)[field] = marker.value;
+        break;
+      }
+    }
+  }
+
+  const { biologicalAge, missingMarkers } = calculatePhenoAgeDirect(phenoInput);
+
+  // Calculate pillar scores
+  const pillars: Array<{ name: string; score: number; status: string; details: string[] }> = [];
+
+  // Metabolic Health
+  const metabolicDetails: string[] = [];
+  let metabolicScore = 0;
+  let metabolicCount = 0;
+  if (phenoInput.glucose !== undefined) {
+    metabolicCount++;
+    if (phenoInput.glucose < 100) {
+      metabolicScore += 100;
+      metabolicDetails.push(`Glucose: ${phenoInput.glucose} mg/dL (Optimal)`);
+    } else if (phenoInput.glucose < 126) {
+      metabolicScore += 60;
+      metabolicDetails.push(`Glucose: ${phenoInput.glucose} mg/dL (Pre-diabetic)`);
+    } else {
+      metabolicScore += 20;
+      metabolicDetails.push(`Glucose: ${phenoInput.glucose} mg/dL (Elevated)`);
+    }
+  }
+  if (metabolicCount > 0) {
+    pillars.push({
+      name: "Metabolic Health",
+      score: Math.round(metabolicScore / metabolicCount),
+      status: metabolicScore / metabolicCount >= 80 ? "optimal" : metabolicScore / metabolicCount >= 60 ? "good" : "needs attention",
+      details: metabolicDetails,
+    });
+  }
+
+  // Inflammation
+  const inflammationDetails: string[] = [];
+  let inflammationScore = 0;
+  let inflammationCount = 0;
+  if (phenoInput.crp !== undefined) {
+    inflammationCount++;
+    if (phenoInput.crp < 1) {
+      inflammationScore += 100;
+      inflammationDetails.push(`hs-CRP: ${phenoInput.crp} mg/L (Low risk)`);
+    } else if (phenoInput.crp < 3) {
+      inflammationScore += 70;
+      inflammationDetails.push(`hs-CRP: ${phenoInput.crp} mg/L (Moderate)`);
+    } else {
+      inflammationScore += 30;
+      inflammationDetails.push(`hs-CRP: ${phenoInput.crp} mg/L (High)`);
+    }
+  }
+  if (inflammationCount > 0) {
+    pillars.push({
+      name: "Inflammation",
+      score: Math.round(inflammationScore / inflammationCount),
+      status: inflammationScore / inflammationCount >= 80 ? "optimal" : inflammationScore / inflammationCount >= 60 ? "good" : "needs attention",
+      details: inflammationDetails,
+    });
+  }
+
+  // Blood Health
+  const bloodDetails: string[] = [];
+  let bloodScore = 0;
+  let bloodCount = 0;
+  if (phenoInput.rdw !== undefined) {
+    bloodCount++;
+    if (phenoInput.rdw <= 14.5) {
+      bloodScore += 100;
+      bloodDetails.push(`RDW: ${phenoInput.rdw}% (Normal)`);
+    } else {
+      bloodScore += 50;
+      bloodDetails.push(`RDW: ${phenoInput.rdw}% (Elevated - linked to aging)`);
+    }
+  }
+  if (phenoInput.wbc !== undefined) {
+    bloodCount++;
+    if (phenoInput.wbc >= 4 && phenoInput.wbc <= 10) {
+      bloodScore += 100;
+      bloodDetails.push(`WBC: ${phenoInput.wbc} K/μL (Normal)`);
+    } else {
+      bloodScore += 50;
+      bloodDetails.push(`WBC: ${phenoInput.wbc} K/μL (Outside normal)`);
+    }
+  }
+  if (bloodCount > 0) {
+    pillars.push({
+      name: "Blood Health",
+      score: Math.round(bloodScore / bloodCount),
+      status: bloodScore / bloodCount >= 80 ? "optimal" : bloodScore / bloodCount >= 60 ? "good" : "needs attention",
+      details: bloodDetails,
+    });
+  }
+
+  const ageDifference = biologicalAge !== null ? biologicalAge - chronologicalAge : null;
+
+  return {
+    chronologicalAge,
+    biologicalAge,
+    ageDifference,
+    agingStatus: ageDifference !== null
+      ? ageDifference < -2 ? "Aging slower than average"
+        : ageDifference > 2 ? "Aging faster than average"
+        : "Aging at expected rate"
+      : null,
+    bloodWorkDate: testDate,
+    labName,
+    pillars,
+    missingMarkers: missingMarkers.length > 0 ? missingMarkers : undefined,
+    recommendations: biologicalAge !== null && ageDifference !== null && ageDifference > 0
+      ? [
+          "Focus on reducing inflammation through diet (omega-3s, colorful vegetables)",
+          "Prioritize 7-8 hours of quality sleep",
+          "Regular exercise (150+ min/week cardio, 2x strength training)",
+          "Manage stress through meditation or breathwork",
+        ]
+      : undefined,
+  };
+}
+
+// ============================================================================
 // MCP SERVER SETUP
 // This is the boilerplate that connects everything to Claude
 // ============================================================================
@@ -972,6 +1478,140 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["foodId"],
         },
       },
+      // Blood Work Tools
+      {
+        name: "get_blood_work_results",
+        description: "Get the user's blood work results with all biomarkers grouped by category (lipids, metabolic, blood, etc.). Each result has an 'id' that can be used with marker management tools.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            limit: {
+              type: "number",
+              description: "Number of results to fetch (default: 5, max: 20)",
+              default: 5,
+            },
+          },
+          required: [],
+        },
+      },
+      {
+        name: "get_blood_work_by_id",
+        description: "Get a specific blood work result by ID with all its markers.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            resultId: {
+              type: "string",
+              description: "The blood work result ID (from get_blood_work_results)",
+            },
+          },
+          required: ["resultId"],
+        },
+      },
+      {
+        name: "add_blood_work_marker",
+        description: "Add a new biomarker to an existing blood work result. Use get_blood_work_results first to get the result ID.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            resultId: {
+              type: "string",
+              description: "The blood work result ID to add the marker to",
+            },
+            name: {
+              type: "string",
+              description: "Marker name (e.g., 'Hemoglobin', 'LDL-C', 'TSH')",
+            },
+            value: {
+              type: "number",
+              description: "The measured value",
+            },
+            unit: {
+              type: "string",
+              description: "Unit of measurement (e.g., 'mg/dL', 'g/dL', 'mIU/L')",
+            },
+            category: {
+              type: "string",
+              description: "Category: metabolic, lipid, blood, liver, kidney, thyroid, vitamins, inflammation, hormones, electrolytes, or other",
+            },
+            referenceMin: {
+              type: "number",
+              description: "Minimum reference range value (optional)",
+            },
+            referenceMax: {
+              type: "number",
+              description: "Maximum reference range value (optional)",
+            },
+          },
+          required: ["resultId", "name", "value", "unit"],
+        },
+      },
+      {
+        name: "edit_blood_work_marker",
+        description: "Edit an existing biomarker in a blood work result. Use get_blood_work_results first to see available markers.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            resultId: {
+              type: "string",
+              description: "The blood work result ID",
+            },
+            markerName: {
+              type: "string",
+              description: "Name of the marker to edit (case-insensitive)",
+            },
+            value: {
+              type: "number",
+              description: "New value (optional)",
+            },
+            unit: {
+              type: "string",
+              description: "New unit (optional)",
+            },
+            name: {
+              type: "string",
+              description: "New name to rename the marker (optional)",
+            },
+            referenceMin: {
+              type: "number",
+              description: "New minimum reference range (optional)",
+            },
+            referenceMax: {
+              type: "number",
+              description: "New maximum reference range (optional)",
+            },
+          },
+          required: ["resultId", "markerName"],
+        },
+      },
+      {
+        name: "delete_blood_work_marker",
+        description: "Delete a biomarker from a blood work result.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            resultId: {
+              type: "string",
+              description: "The blood work result ID",
+            },
+            markerName: {
+              type: "string",
+              description: "Name of the marker to delete (case-insensitive)",
+            },
+          },
+          required: ["resultId", "markerName"],
+        },
+      },
+      // Longevity Tools
+      {
+        name: "get_longevity_metrics",
+        description: "Get the user's biological age calculated from blood work using PhenoAge algorithm, plus longevity pillar scores (metabolic health, inflammation, blood health). Shows how fast or slow the user is aging compared to their chronological age.",
+        inputSchema: {
+          type: "object",
+          properties: {},
+          required: [],
+        },
+      },
     ],
   };
 });
@@ -1016,6 +1656,43 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case "get_food_portions":
         result = await getFoodPortions(args?.foodId as string);
+        break;
+      // Blood Work Tools
+      case "get_blood_work_results":
+        result = await getBloodWorkResults((args?.limit as number) || 5);
+        break;
+      case "get_blood_work_by_id":
+        result = await getBloodWorkById(args?.resultId as string);
+        break;
+      case "add_blood_work_marker":
+        result = await addBloodWorkMarker(args?.resultId as string, {
+          name: args?.name as string,
+          value: args?.value as number,
+          unit: args?.unit as string,
+          category: args?.category as string | undefined,
+          referenceMin: args?.referenceMin as number | undefined,
+          referenceMax: args?.referenceMax as number | undefined,
+        });
+        break;
+      case "edit_blood_work_marker":
+        result = await editBloodWorkMarker(
+          args?.resultId as string,
+          args?.markerName as string,
+          {
+            value: args?.value as number | undefined,
+            unit: args?.unit as string | undefined,
+            name: args?.name as string | undefined,
+            referenceMin: args?.referenceMin as number | undefined,
+            referenceMax: args?.referenceMax as number | undefined,
+          }
+        );
+        break;
+      case "delete_blood_work_marker":
+        result = await deleteBloodWorkMarker(args?.resultId as string, args?.markerName as string);
+        break;
+      // Longevity Tools
+      case "get_longevity_metrics":
+        result = await getLongevityMetrics();
         break;
       default:
         throw new Error(`Unknown tool: ${name}`);

@@ -87,13 +87,24 @@ export async function GET(request: NextRequest) {
       .limit(1);
 
     if (goals.length === 0) {
-      // Return default goals if none set
+      // Fall back to user.settings if no nutrition goals set
+      // This allows settings page changes to reflect in nutrition page
+      const userSettings = (user.settings as Record<string, unknown>) || {};
+      const calorieFromSettings = userSettings.calorieTarget as number | undefined;
+      const proteinFromSettings = userSettings.proteinTargetG as number | undefined;
+
+      // Calculate macros based on calorie target (30/40/30 split)
+      const calorieGoal = calorieFromSettings || 2000;
+      const proteinG = proteinFromSettings || Math.round((calorieGoal * 0.30) / 4);
+      const carbsG = Math.round((calorieGoal * 0.40) / 4);
+      const fatG = Math.round((calorieGoal * 0.30) / 9);
+
       return NextResponse.json({
         goals: {
-          calorieGoal: 2000,
-          proteinG: 150,
-          carbsG: 200,
-          fatG: 65,
+          calorieGoal,
+          proteinG,
+          carbsG,
+          fatG,
           fiberG: 30,
           proteinPercent: 30,
           carbsPercent: 40,
@@ -103,6 +114,7 @@ export async function GET(request: NextRequest) {
           goal: "maintain",
         },
         isDefault: true,
+        source: calorieFromSettings ? "settings" : "default",
       });
     }
 
