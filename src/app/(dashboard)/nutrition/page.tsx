@@ -13,6 +13,7 @@ import {
   Moon,
   Cookie,
   Trash2,
+  Pencil,
   Settings,
   Flame,
   Beef,
@@ -21,6 +22,7 @@ import {
 } from "lucide-react";
 import { FoodSearchModal } from "@/components/nutrition/food-search-modal";
 import { GoalSetupModal } from "@/components/nutrition/goal-setup-modal";
+import { FoodEditModal } from "@/components/nutrition/food-edit-modal";
 
 interface FoodLog {
   id: string;
@@ -82,7 +84,9 @@ export default function NutritionPage() {
   const [loading, setLoading] = useState(true);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [goalModalOpen, setGoalModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedMealType, setSelectedMealType] = useState<string>("breakfast");
+  const [editingFood, setEditingFood] = useState<FoodLog | null>(null);
 
   // Fetch day data
   const fetchDayData = async () => {
@@ -214,6 +218,19 @@ export default function NutritionPage() {
   // Handle food logged from modal
   const handleFoodLogged = () => {
     setSearchModalOpen(false);
+    fetchDayData();
+  };
+
+  // Edit food log
+  const handleEditLog = (log: FoodLog) => {
+    setEditingFood(log);
+    setEditModalOpen(true);
+  };
+
+  // Handle food updated from edit modal
+  const handleFoodUpdated = () => {
+    setEditModalOpen(false);
+    setEditingFood(null);
     fetchDayData();
   };
 
@@ -485,6 +502,14 @@ export default function NutritionPage() {
                             variant="ghost"
                             size="icon"
                             className="opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => handleEditLog(log)}
+                          >
+                            <Pencil className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity"
                             onClick={() => handleDeleteLog(log.id)}
                           >
                             <Trash2 className="h-4 w-4 text-destructive" />
@@ -523,6 +548,17 @@ export default function NutritionPage() {
         open={goalModalOpen}
         onClose={() => setGoalModalOpen(false)}
         onGoalsUpdated={handleGoalsUpdated}
+      />
+
+      {/* Food Edit Modal */}
+      <FoodEditModal
+        open={editModalOpen}
+        onClose={() => {
+          setEditModalOpen(false);
+          setEditingFood(null);
+        }}
+        onFoodUpdated={handleFoodUpdated}
+        food={editingFood}
       />
     </div>
   );

@@ -1,15 +1,16 @@
 /**
- * Evidence-based sleep scoring algorithm
- * Based on Pittsburgh Sleep Quality Index (PSQI) research
+ * MVP Sleep Scoring Algorithm (0-100 scale)
+ * Uses linear decay between thresholds for smooth scoring.
  *
  * Components and weights:
- * - Duration: 20% (optimal 7-9 hours)
- * - Efficiency: 20% (time asleep / time in bed)
- * - Deep Sleep: 15% (optimal 15-20%)
- * - REM Sleep: 15% (optimal 20-25%)
- * - Latency: 10% (time to fall asleep)
- * - Awakenings: 10% (time awake during night)
- * - HRV: 10% (compared to personal baseline)
+ * - Duration: 40 pts (target ≥7.5h, zero ≤4.5h)
+ * - WASO/Awakenings: 30 pts (target ≤15min, zero ≥60min)
+ * - Deep Sleep: 15 pts (target ≥15%, zero ≤5%)
+ * - REM Sleep: 15 pts (target ≥20%, zero ≤5%)
+ *
+ * Data Handling:
+ * - If Deep/REM data missing (sensor error), redistribute to Duration (70%) + WASO (30%)
+ * - WASO = Wake After Sleep Onset (awake time between sleep start and end)
  */
 
 // Types
@@ -41,12 +42,9 @@ export interface SleepScoreComponent {
 
 export interface SleepScoreComponents {
   duration: SleepScoreComponent;
-  efficiency: SleepScoreComponent;
   deepSleep: SleepScoreComponent;
   remSleep: SleepScoreComponent;
-  latency: SleepScoreComponent;
   awakenings: SleepScoreComponent;
-  hrv: SleepScoreComponent;
 }
 
 export interface SleepScoreResult {
@@ -56,50 +54,33 @@ export interface SleepScoreResult {
   recommendations: string[];
 }
 
-// Component weights (must sum to 1.0)
+// Component weights (must sum to 100)
 const WEIGHTS = {
-  duration: 0.2,
-  efficiency: 0.2,
-  deepSleep: 0.15,
-  remSleep: 0.15,
-  latency: 0.1,
-  awakenings: 0.1,
-  hrv: 0.1,
+  duration: 40,
+  awakenings: 30,
+  deepSleep: 15,
+  remSleep: 15,
 } as const;
 
 /**
- * Score sleep duration
- * Optimal: 7-9 hours = 100
- * Suboptimal: 6-7 hours = 75
- * Poor: <6 hours or >9 hours = 50
+ * Score sleep duration (40 pts max)
+ * Target: ≥7.5 hours = 40 pts
+ * Zero: ≤4.5 hours = 0 pts
+ * Linear scale between thresholds
  */
 export function scoreDuration(totalMinutes: number): number {
   const hours = totalMinutes / 60;
-  if (hours >= 7 && hours <= 9) return 100;
-  if (hours >= 6 && hours < 7) return 75;
-  if (hours > 9 && hours <= 10) return 75; // Slightly over is okay
-  return 50;
+  if (hours >= 7.5) return WEIGHTS.duration;
+  if (hours <= 4.5) return 0;
+  // Linear scale: (hours - 4.5) / (7.5 - 4.5) * 40
+  return Math.round(((hours - 4.5) / 3) * WEIGHTS.duration);
 }
 
 /**
- * Score sleep efficiency (time asleep / time in bed)
- * Based on PSQI thresholds
- */
-export function scoreEfficiency(
-  totalMinutes: number,
-  inBedMinutes: number
-): number {
-  if (inBedMinutes === 0) return 0;
-  const efficiency = (totalMinutes / inBedMinutes) * 100;
-  if (efficiency >= 85) return 100;
-  if (efficiency >= 75) return 75;
-  if (efficiency >= 65) return 50;
-  return 25;
-}
-
-/**
- * Score deep sleep percentage
- * Optimal: 15-20% of total sleep
+ * Score deep sleep percentage (15 pts max)
+ * Target: ≥15% = 15 pts
+ * Zero: ≤5% = 0 pts
+ * Linear scale between thresholds
  */
 export function scoreDeepSleep(
   deepMinutes: number,
@@ -107,75 +88,38 @@ export function scoreDeepSleep(
 ): number {
   if (totalMinutes === 0) return 0;
   const percent = (deepMinutes / totalMinutes) * 100;
-  if (percent >= 15 && percent <= 20) return 100;
-  if (percent >= 10 && percent < 15) return 75;
-  if (percent > 20 && percent <= 25) return 75; // Slightly over is fine
-  return 50;
+  if (percent >= 15) return WEIGHTS.deepSleep;
+  if (percent <= 5) return 0;
+  // Linear scale: (percent - 5) / (15 - 5) * 15
+  return Math.round(((percent - 5) / 10) * WEIGHTS.deepSleep);
 }
 
 /**
- * Score REM sleep percentage
- * Optimal: 20-25% of total sleep
+ * Score REM sleep percentage (15 pts max)
+ * Target: ≥20% = 15 pts
+ * Zero: ≤5% = 0 pts
+ * Linear scale between thresholds
  */
 export function scoreRemSleep(remMinutes: number, totalMinutes: number): number {
   if (totalMinutes === 0) return 0;
   const percent = (remMinutes / totalMinutes) * 100;
-  if (percent >= 20 && percent <= 25) return 100;
-  if (percent >= 15 && percent < 20) return 75;
-  if (percent > 25 && percent <= 30) return 75; // Slightly over is fine
-  return 50;
+  if (percent >= 20) return WEIGHTS.remSleep;
+  if (percent <= 5) return 0;
+  // Linear scale: (percent - 5) / (20 - 5) * 15
+  return Math.round(((percent - 5) / 15) * WEIGHTS.remSleep);
 }
 
 /**
- * Score sleep latency (time to fall asleep)
- * Based on PSQI: <15min is ideal
+ * Score WASO/awakenings (30 pts max)
+ * Target: ≤15 min = 30 pts
+ * Zero: ≥60 min = 0 pts
+ * Linear inverse scale between thresholds
  */
-export function scoreLatency(latencyMinutes: number): number {
-  if (latencyMinutes < 15) return 100;
-  if (latencyMinutes <= 30) return 75;
-  if (latencyMinutes <= 60) return 50;
-  return 25;
-}
-
-/**
- * Score awakenings (time awake during night)
- */
-export function scoreAwakenings(awakeMinutes: number): number {
-  if (awakeMinutes < 5) return 100;
-  if (awakeMinutes <= 15) return 75;
-  if (awakeMinutes <= 30) return 50;
-  return 25;
-}
-
-/**
- * Score HRV compared to personal baseline using z-score
- * Higher HRV during sleep indicates better recovery
- */
-export function scoreHrv(
-  hrvAvg: number | null,
-  baseline: PersonalBaseline | null
-): number {
-  // No data available - return neutral score
-  if (hrvAvg === null) return 75;
-
-  // No baseline - use population-based scoring
-  if (baseline === null) {
-    // General population: 50+ ms is good during sleep
-    if (hrvAvg >= 60) return 100;
-    if (hrvAvg >= 50) return 85;
-    if (hrvAvg >= 40) return 70;
-    if (hrvAvg >= 30) return 55;
-    return 40;
-  }
-
-  // Compare to personal baseline using z-score
-  const stdDev = baseline.hrvStdDev || 10; // Default if no variance
-  const zScore = (hrvAvg - baseline.hrvAvg) / stdDev;
-
-  if (zScore >= 0.5) return 100; // Above average
-  if (zScore >= -0.5) return 75; // Within normal range
-  if (zScore >= -1.0) return 50; // Slightly below
-  return 25; // Significantly below baseline
+export function scoreAwakenings(wasoMinutes: number): number {
+  if (wasoMinutes <= 15) return WEIGHTS.awakenings;
+  if (wasoMinutes >= 60) return 0;
+  // Linear inverse: (60 - wasoMinutes) / (60 - 15) * 30
+  return Math.round(((60 - wasoMinutes) / 45) * WEIGHTS.awakenings);
 }
 
 /**
@@ -226,58 +170,41 @@ export function calculatePersonalBaseline(
 
 /**
  * Generate actionable recommendations based on score components
+ * Thresholds based on 75% of max points for each component
  */
 export function generateRecommendations(
   components: SleepScoreComponents
 ): string[] {
   const recommendations: string[] = [];
 
-  if (components.duration.score < 75) {
+  // Duration: 75% of 40 = 30 pts
+  if (components.duration.score < 30) {
     const hours = (components.duration.value || 0) / 60;
     if (hours < 7) {
       recommendations.push(
         "Aim for 7-9 hours of sleep. Consider going to bed 30 minutes earlier."
       );
-    } else {
-      recommendations.push(
-        "You may be oversleeping. Try maintaining a consistent 7-9 hour schedule."
-      );
     }
   }
 
-  if (components.efficiency.score < 75) {
-    recommendations.push(
-      "Improve sleep efficiency by only going to bed when sleepy and keeping a consistent schedule."
-    );
-  }
-
-  if (components.deepSleep.score < 75) {
+  // Deep Sleep: 75% of 15 = ~11 pts
+  if (components.deepSleep.score < 11) {
     recommendations.push(
       "To increase deep sleep: exercise earlier in the day, avoid alcohol, and keep your room cool (65-68°F)."
     );
   }
 
-  if (components.remSleep.score < 75) {
+  // REM Sleep: 75% of 15 = ~11 pts
+  if (components.remSleep.score < 11) {
     recommendations.push(
       "To improve REM sleep: reduce caffeine after noon, limit screen time before bed, and maintain consistent sleep times."
     );
   }
 
-  if (components.latency.score < 75) {
-    recommendations.push(
-      "Taking too long to fall asleep? Try relaxation techniques, avoid screens 1 hour before bed, or consider a wind-down routine."
-    );
-  }
-
-  if (components.awakenings.score < 75) {
+  // Awakenings: 75% of 30 = ~22 pts
+  if (components.awakenings.score < 22) {
     recommendations.push(
       "Reduce nighttime awakenings by keeping your bedroom dark, quiet, and cool. Avoid liquids 2 hours before bed."
-    );
-  }
-
-  if (components.hrv.score < 75) {
-    recommendations.push(
-      "Your HRV is below your baseline, indicating lower recovery. Prioritize rest and stress management today."
     );
   }
 
@@ -297,17 +224,13 @@ function getQualityLabel(
 }
 
 /**
- * Main function: Calculate comprehensive sleep score
+ * Main function: Calculate comprehensive sleep score (0-100)
+ * Handles missing Deep/REM data by redistributing weights
  */
 export function calculateSleepScore(
   session: SleepSessionData,
-  baseline: PersonalBaseline | null
+  _baseline: PersonalBaseline | null = null
 ): SleepScoreResult {
-  const efficiency =
-    session.inBedMinutes > 0
-      ? (session.totalMinutes / session.inBedMinutes) * 100
-      : 0;
-
   const deepPercent =
     session.totalMinutes > 0
       ? (session.deepSleepMinutes / session.totalMinutes) * 100
@@ -318,62 +241,82 @@ export function calculateSleepScore(
       ? (session.remSleepMinutes / session.totalMinutes) * 100
       : 0;
 
-  // Calculate individual component scores
-  const components: SleepScoreComponents = {
-    duration: {
-      score: scoreDuration(session.totalMinutes),
-      value: session.totalMinutes,
-      weight: WEIGHTS.duration,
-      label: "Duration",
-    },
-    efficiency: {
-      score: scoreEfficiency(session.totalMinutes, session.inBedMinutes),
-      value: Math.round(efficiency * 10) / 10,
-      weight: WEIGHTS.efficiency,
-      label: "Efficiency",
-    },
-    deepSleep: {
-      score: scoreDeepSleep(session.deepSleepMinutes, session.totalMinutes),
-      value: Math.round(deepPercent * 10) / 10,
-      weight: WEIGHTS.deepSleep,
-      label: "Deep Sleep",
-    },
-    remSleep: {
-      score: scoreRemSleep(session.remSleepMinutes, session.totalMinutes),
-      value: Math.round(remPercent * 10) / 10,
-      weight: WEIGHTS.remSleep,
-      label: "REM Sleep",
-    },
-    latency: {
-      score: scoreLatency(session.sleepLatencyMinutes),
-      value: session.sleepLatencyMinutes,
-      weight: WEIGHTS.latency,
-      label: "Time to Sleep",
-    },
-    awakenings: {
-      score: scoreAwakenings(session.awakeMinutes),
-      value: session.awakeMinutes,
-      weight: WEIGHTS.awakenings,
-      label: "Awakenings",
-    },
-    hrv: {
-      score: scoreHrv(session.hrvAvg, baseline),
-      value: session.hrvAvg,
-      weight: WEIGHTS.hrv,
-      label: "HRV",
-    },
-  };
+  // Check if sleep stage data is available (Apple Watch sensor error handling)
+  const hasSleepStages =
+    session.deepSleepMinutes > 0 || session.remSleepMinutes > 0;
 
-  // Calculate weighted total score
-  const totalScore = Math.round(
-    components.duration.score * WEIGHTS.duration +
-      components.efficiency.score * WEIGHTS.efficiency +
-      components.deepSleep.score * WEIGHTS.deepSleep +
-      components.remSleep.score * WEIGHTS.remSleep +
-      components.latency.score * WEIGHTS.latency +
-      components.awakenings.score * WEIGHTS.awakenings +
-      components.hrv.score * WEIGHTS.hrv
-  );
+  // Calculate base component scores
+  const durationScore = scoreDuration(session.totalMinutes);
+  const awakeningsScore = scoreAwakenings(session.awakeMinutes);
+  const deepScore = scoreDeepSleep(session.deepSleepMinutes, session.totalMinutes);
+  const remScore = scoreRemSleep(session.remSleepMinutes, session.totalMinutes);
+
+  let totalScore: number;
+  let components: SleepScoreComponents;
+
+  if (hasSleepStages) {
+    // Normal scoring: Duration (40) + Awakenings (30) + Deep (15) + REM (15) = 100
+    totalScore = durationScore + awakeningsScore + deepScore + remScore;
+
+    components = {
+      duration: {
+        score: durationScore,
+        value: session.totalMinutes,
+        weight: WEIGHTS.duration,
+        label: "Duration",
+      },
+      deepSleep: {
+        score: deepScore,
+        value: Math.round(deepPercent * 10) / 10,
+        weight: WEIGHTS.deepSleep,
+        label: "Deep Sleep",
+      },
+      remSleep: {
+        score: remScore,
+        value: Math.round(remPercent * 10) / 10,
+        weight: WEIGHTS.remSleep,
+        label: "REM Sleep",
+      },
+      awakenings: {
+        score: awakeningsScore,
+        value: session.awakeMinutes,
+        weight: WEIGHTS.awakenings,
+        label: "Awakenings",
+      },
+    };
+  } else {
+    // Fallback scoring when Deep/REM missing: Duration (70) + Awakenings (30) = 100
+    // Scale duration score from 40-point scale to 70-point scale
+    const scaledDurationScore = Math.round((durationScore / 40) * 70);
+    totalScore = scaledDurationScore + awakeningsScore;
+
+    components = {
+      duration: {
+        score: scaledDurationScore,
+        value: session.totalMinutes,
+        weight: 70,
+        label: "Duration",
+      },
+      deepSleep: {
+        score: 0,
+        value: null,
+        weight: 0,
+        label: "Deep Sleep",
+      },
+      remSleep: {
+        score: 0,
+        value: null,
+        weight: 0,
+        label: "REM Sleep",
+      },
+      awakenings: {
+        score: awakeningsScore,
+        value: session.awakeMinutes,
+        weight: WEIGHTS.awakenings,
+        label: "Awakenings",
+      },
+    };
+  }
 
   const recommendations = generateRecommendations(components);
   const quality = getQualityLabel(totalScore);

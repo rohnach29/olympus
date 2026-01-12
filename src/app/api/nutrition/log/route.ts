@@ -178,6 +178,65 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// PUT - Update a food log
+export async function PUT(request: NextRequest) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { id, foodName, servingQuantity, servingUnit } = body;
+
+    if (!id) {
+      return NextResponse.json(
+        { error: "Log ID is required" },
+        { status: 400 }
+      );
+    }
+
+    // Build update object with only provided fields
+    const updateData: Record<string, unknown> = {};
+    if (foodName !== undefined) updateData.foodName = foodName;
+    if (servingQuantity !== undefined) updateData.servingQuantity = servingQuantity;
+    if (servingUnit !== undefined) updateData.servingUnit = servingUnit;
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json(
+        { error: "No fields to update" },
+        { status: 400 }
+      );
+    }
+
+    const [updatedLog] = await db
+      .update(foodLogs)
+      .set(updateData)
+      .where(
+        and(
+          eq(foodLogs.id, id),
+          eq(foodLogs.userId, user.id)
+        )
+      )
+      .returning();
+
+    if (!updatedLog) {
+      return NextResponse.json(
+        { error: "Log not found" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ log: updatedLog });
+  } catch (error) {
+    console.error("Update food log error:", error);
+    return NextResponse.json(
+      { error: "Failed to update food log" },
+      { status: 500 }
+    );
+  }
+}
+
 // DELETE - Remove a food log
 export async function DELETE(request: NextRequest) {
   try {
