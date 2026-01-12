@@ -49,17 +49,36 @@ export async function GET(request: NextRequest) {
         .limit(limit);
     }
 
+    // Recalculate sleep scores with current algorithm for all sessions
+    const sessionsWithRecalculatedScores = results.map((s) => {
+      const sessionData: SleepSessionData = {
+        totalMinutes: s.totalMinutes,
+        inBedMinutes: s.inBedMinutes,
+        deepSleepMinutes: s.deepSleepMinutes || 0,
+        remSleepMinutes: s.remSleepMinutes || 0,
+        lightSleepMinutes: s.lightSleepMinutes || 0,
+        awakeMinutes: s.awakeMinutes || 0,
+        sleepLatencyMinutes: s.sleepLatencyMinutes || 0,
+        hrvAvg: s.hrvAvg,
+      };
+      const scoreResult = calculateSleepScore(sessionData, null);
+      return {
+        ...s,
+        sleepScore: scoreResult.totalScore,
+      };
+    });
+
     // `latest` is the most recent session (for charts/trends)
-    const latest = results[0] || null;
+    const latest = sessionsWithRecalculatedScores[0] || null;
 
     // `lastNight` is specifically yesterday's session (for "Last Night's Sleep" display)
     // This prevents showing stale data when no sleep was logged last night
-    const lastNight = results.find((s) => s.sleepDate === lastNightDate) || null;
+    const lastNight = sessionsWithRecalculatedScores.find((s) => s.sleepDate === lastNightDate) || null;
 
-    // Calculate weekly average (only count sessions with valid data)
-    const sessionsWithScores = results.filter((s) => s.sleepScore !== null);
+    // Calculate weekly average using recalculated scores
+    const sessionsWithScores = sessionsWithRecalculatedScores.filter((s) => s.sleepScore !== null);
     const weeklyAvg =
-      results.length > 0
+      sessionsWithRecalculatedScores.length > 0
         ? {
             avgScore:
               sessionsWithScores.length > 0
@@ -69,22 +88,22 @@ export async function GET(request: NextRequest) {
                   )
                 : 0,
             avgDurationMinutes: Math.round(
-              results.reduce((sum, s) => sum + s.totalMinutes, 0) /
-                results.length
+              sessionsWithRecalculatedScores.reduce((sum, s) => sum + s.totalMinutes, 0) /
+                sessionsWithRecalculatedScores.length
             ),
             avgEfficiency:
               Math.round(
-                (results.reduce((sum, s) => sum + Number(s.efficiency || 0), 0) /
-                  results.length) *
+                (sessionsWithRecalculatedScores.reduce((sum, s) => sum + Number(s.efficiency || 0), 0) /
+                  sessionsWithRecalculatedScores.length) *
                   10
               ) / 10,
             avgDeepMinutes: Math.round(
-              results.reduce((sum, s) => sum + (s.deepSleepMinutes || 0), 0) /
-                results.length
+              sessionsWithRecalculatedScores.reduce((sum, s) => sum + (s.deepSleepMinutes || 0), 0) /
+                sessionsWithRecalculatedScores.length
             ),
             avgRemMinutes: Math.round(
-              results.reduce((sum, s) => sum + (s.remSleepMinutes || 0), 0) /
-                results.length
+              sessionsWithRecalculatedScores.reduce((sum, s) => sum + (s.remSleepMinutes || 0), 0) /
+                sessionsWithRecalculatedScores.length
             ),
           }
         : null;
@@ -92,19 +111,6 @@ export async function GET(request: NextRequest) {
     // Calculate score breakdown for latest session
     let scoreDetails = null;
     if (latest) {
-      // Convert results to SleepSessionData for baseline calculation
-      const historyData: SleepSessionData[] = results.map((s) => ({
-        totalMinutes: s.totalMinutes,
-        inBedMinutes: s.inBedMinutes,
-        deepSleepMinutes: s.deepSleepMinutes || 0,
-        remSleepMinutes: s.remSleepMinutes || 0,
-        lightSleepMinutes: s.lightSleepMinutes || 0,
-        awakeMinutes: s.awakeMinutes || 0,
-        sleepLatencyMinutes: s.sleepLatencyMinutes || 0,
-        hrvAvg: s.hrvAvg,
-      }));
-
-      const baseline = calculatePersonalBaseline(historyData);
       const latestData: SleepSessionData = {
         totalMinutes: latest.totalMinutes,
         inBedMinutes: latest.inBedMinutes,
@@ -116,11 +122,11 @@ export async function GET(request: NextRequest) {
         hrvAvg: latest.hrvAvg,
       };
 
-      scoreDetails = calculateSleepScore(latestData, baseline);
+      scoreDetails = calculateSleepScore(latestData, null);
     }
 
     return NextResponse.json({
-      sessions: results,
+      sessions: sessionsWithRecalculatedScores,
       latest,
       lastNight, // Specifically yesterday's data (null if no data for last night)
       weeklyAverage: weeklyAvg,

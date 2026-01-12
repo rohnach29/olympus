@@ -134,47 +134,46 @@ export default function SleepPage() {
                     <DialogHeader>
                       <DialogTitle>How Your Sleep Score Works</DialogTitle>
                       <DialogDescription>
-                        Based on Pittsburgh Sleep Quality Index research
+                        Simple scoring focused on what matters most
                       </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 text-sm">
                       <p className="text-muted-foreground">
-                        Your sleep score is a weighted average of 7 components:
+                        Your sleep score (0-100) is based on 4 key factors:
                       </p>
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span className="font-medium">Duration</span>
-                          <span className="text-muted-foreground">20% — 7-9h is optimal</span>
+                      <div className="space-y-3">
+                        <div>
+                          <div className="flex justify-between">
+                            <span className="font-medium">Duration</span>
+                            <span className="text-muted-foreground font-medium">40 pts</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">Target: 7.5+ hours for max points</p>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="font-medium">Efficiency</span>
-                          <span className="text-muted-foreground">20% — time asleep vs in bed</span>
+                        <div>
+                          <div className="flex justify-between">
+                            <span className="font-medium">Awakenings</span>
+                            <span className="text-muted-foreground font-medium">30 pts</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">Target: under 15 min awake during night</p>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="font-medium">Deep Sleep</span>
-                          <span className="text-muted-foreground">15% — 15-20% is ideal</span>
+                        <div>
+                          <div className="flex justify-between">
+                            <span className="font-medium">Deep Sleep</span>
+                            <span className="text-muted-foreground font-medium">15 pts</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">Target: 15%+ of total sleep</p>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="font-medium">REM Sleep</span>
-                          <span className="text-muted-foreground">15% — 20-25% is ideal</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="font-medium">Time to Sleep</span>
-                          <span className="text-muted-foreground">10% — under 15min is best</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="font-medium">Awakenings</span>
-                          <span className="text-muted-foreground">10% — less is better</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="font-medium">HRV</span>
-                          <span className="text-muted-foreground">10% — vs your baseline</span>
+                        <div>
+                          <div className="flex justify-between">
+                            <span className="font-medium">REM Sleep</span>
+                            <span className="text-muted-foreground font-medium">15 pts</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">Target: 20%+ of total sleep</p>
                         </div>
                       </div>
                       <div className="pt-2 border-t text-muted-foreground">
                         <p className="text-xs">
-                          HRV compares tonight to your personal 14-day baseline using statistical analysis,
-                          so scores are personalized to you.
+                          Scores scale linearly between zero and target thresholds. If your watch doesn&apos;t capture sleep stages, points are redistributed to Duration and Awakenings.
                         </p>
                       </div>
                     </div>
