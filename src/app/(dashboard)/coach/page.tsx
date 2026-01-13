@@ -5,7 +5,18 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Send, Bot, User, Loader2, Sparkles, AlertCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Send,
+  Bot,
+  User,
+  Loader2,
+  Sparkles,
+  AlertCircle,
+  Wrench,
+  CheckCircle2,
+  XCircle,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Message {
@@ -13,13 +24,16 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  toolsUsed?: string[];
 }
 
 const suggestedQuestions = [
-  "Why is my HRV lower than usual?",
-  "What should I eat before a workout?",
-  "How can I improve my sleep quality?",
-  "Am I overtraining based on my data?",
+  "How did I sleep this week?",
+  "What's my biological age?",
+  "What did I eat today?",
+  "Show my blood work results",
+  "Search for vitamin D benefits",
+  "What's my HRV trend?",
 ];
 
 export default function CoachPage() {
@@ -28,13 +42,16 @@ export default function CoachPage() {
       id: "welcome",
       role: "assistant",
       content:
-        "Hello! I'm your Olympus AI health coach. I can help you understand your health data, answer questions about nutrition, fitness, sleep, and recovery, and provide personalized recommendations based on your metrics.\n\nWhat would you like to know?",
+        "Hello! I'm your Olympus AI health coach powered by Llama. I have access to your health data and can help you understand your sleep, nutrition, workouts, blood work, and longevity metrics.\n\nI can also search the web for detailed nutrition and supplement information.\n\nWhat would you like to know?",
       timestamp: new Date(),
     },
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [serverStatus, setServerStatus] = useState<
+    "checking" | "healthy" | "unhealthy"
+  >("checking");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -44,6 +61,23 @@ export default function CoachPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Check server health on mount
+  useEffect(() => {
+    const checkHealth = async () => {
+      try {
+        const response = await fetch("/api/ai/coach");
+        if (response.ok) {
+          setServerStatus("healthy");
+        } else {
+          setServerStatus("unhealthy");
+        }
+      } catch {
+        setServerStatus("unhealthy");
+      }
+    };
+    checkHealth();
+  }, []);
 
   const sendMessage = async (content: string) => {
     if (!content.trim() || isLoading) return;
@@ -61,7 +95,7 @@ export default function CoachPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch("/api/ai/chat", {
+      const response = await fetch("/api/ai/coach", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -88,15 +122,24 @@ export default function CoachPage() {
         role: "assistant",
         content: data.message,
         timestamp: new Date(),
+        toolsUsed: data.toolsUsed,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to connect to AI. Make sure Ollama is running."
-      );
+      const errorMsg =
+        err instanceof Error ? err.message : "Failed to connect to AI coach";
+
+      // Provide helpful context for common errors
+      if (errorMsg.includes("not running") || errorMsg.includes("ECONNREFUSED")) {
+        setError(
+          "AI Coach server is not running. Start it with: cd ai-coach && uvicorn olympus_coach.server:app --port 8100"
+        );
+      } else if (errorMsg.includes("Ollama")) {
+        setError("Ollama is not running. Start it with: ollama serve");
+      } else {
+        setError(errorMsg);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -107,17 +150,49 @@ export default function CoachPage() {
     sendMessage(input);
   };
 
+  // Format tool names for display
+  const formatToolName = (tool: string) => {
+    return tool
+      .replace(/_/g, " ")
+      .replace(/get /gi, "")
+      .replace(/\b\w/g, (l) => l.toUpperCase());
+  };
+
   return (
     <div className="h-[calc(100vh-7rem)] flex flex-col">
       {/* Header */}
-      <div className="mb-4">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Sparkles className="h-6 w-6 text-primary" />
-          AI Health Coach
-        </h1>
-        <p className="text-muted-foreground">
-          Get personalized insights based on your health data
-        </p>
+      <div className="mb-4 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Sparkles className="h-6 w-6 text-primary" />
+            AI Health Coach
+          </h1>
+          <p className="text-muted-foreground">
+            Powered by Llama with access to your health data
+          </p>
+        </div>
+
+        {/* Server Status Indicator */}
+        <div className="flex items-center gap-2">
+          {serverStatus === "checking" && (
+            <Badge variant="secondary" className="gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Checking...
+            </Badge>
+          )}
+          {serverStatus === "healthy" && (
+            <Badge variant="secondary" className="gap-1 bg-green-500/10 text-green-600">
+              <CheckCircle2 className="h-3 w-3" />
+              Agent Ready
+            </Badge>
+          )}
+          {serverStatus === "unhealthy" && (
+            <Badge variant="secondary" className="gap-1 bg-red-500/10 text-red-600">
+              <XCircle className="h-3 w-3" />
+              Agent Offline
+            </Badge>
+          )}
+        </div>
       </div>
 
       {/* Chat Container */}
@@ -140,15 +215,33 @@ export default function CoachPage() {
                 </Avatar>
               )}
 
-              <div
-                className={cn(
-                  "max-w-[80%] rounded-2xl px-4 py-3",
-                  message.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted"
+              <div className="max-w-[80%] space-y-2">
+                <div
+                  className={cn(
+                    "rounded-2xl px-4 py-3",
+                    message.role === "user"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted"
+                  )}
+                >
+                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                </div>
+
+                {/* Tools Used Badge */}
+                {message.toolsUsed && message.toolsUsed.length > 0 && (
+                  <div className="flex flex-wrap gap-1 px-1">
+                    <Wrench className="h-3 w-3 text-muted-foreground mt-0.5" />
+                    {message.toolsUsed.map((tool) => (
+                      <Badge
+                        key={tool}
+                        variant="outline"
+                        className="text-xs py-0 h-5"
+                      >
+                        {formatToolName(tool)}
+                      </Badge>
+                    ))}
+                  </div>
                 )}
-              >
-                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
               </div>
 
               {message.role === "user" && (
@@ -168,16 +261,19 @@ export default function CoachPage() {
                   <Bot className="h-4 w-4 text-primary" />
                 </AvatarFallback>
               </Avatar>
-              <div className="bg-muted rounded-2xl px-4 py-3">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <div className="bg-muted rounded-2xl px-4 py-3 flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">
+                  Analyzing your data...
+                </span>
               </div>
             </div>
           )}
 
           {error && (
-            <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-lg p-3">
-              <AlertCircle className="h-4 w-4" />
-              <span>{error}</span>
+            <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 rounded-lg p-3">
+              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <span className="whitespace-pre-wrap">{error}</span>
             </div>
           )}
 
@@ -188,7 +284,7 @@ export default function CoachPage() {
         {messages.length <= 2 && !isLoading && (
           <div className="px-4 pb-2">
             <p className="text-xs text-muted-foreground mb-2">
-              Suggested questions:
+              Try asking:
             </p>
             <div className="flex flex-wrap gap-2">
               {suggestedQuestions.map((question) => (
@@ -225,7 +321,8 @@ export default function CoachPage() {
             </Button>
           </form>
           <p className="text-xs text-muted-foreground mt-2 text-center">
-            AI provides general wellness guidance, not medical advice.
+            AI provides general wellness guidance, not medical advice. Powered by
+            Llama 3.1 with 18 health tools.
           </p>
         </div>
       </Card>
