@@ -63,15 +63,15 @@ Auth | iron-session + bcrypt
 
 The MCP server exposes these tools to LLMs:
 
- `get_health_summary` | Today's metrics + weekly averages |
- `get_sleep_summary` | Sleep stages, efficiency, trends |
- `get_hrv_trend` | HRV data for recovery analysis |
- `get_recent_workouts` | Workout history with heart rate data |
- `get_todays_food_log` | Meals logged today with macros |
- `log_food` | Log a meal with full nutritional data |
- `search_foods` | Search USDA database |
- `get_blood_work_results` | Biomarker history |
- `get_longevity_metrics` | Biological age calculation |
+ `get_health_summary` | Today's metrics + weekly averages 
+ `get_sleep_summary` | Sleep stages, efficiency, trends 
+ `get_hrv_trend` | HRV data for recovery analysis 
+ `get_recent_workouts` | Workout history with heart rate data 
+ `get_todays_food_log` | Meals logged today with macros 
+ `log_food` | Log a meal with full nutritional data 
+ `search_foods` | Search USDA database 
+ `get_blood_work_results` | Biomarker history 
+ `get_longevity_metrics` | Biological age calculation 
 
 ## Running Locally
 
