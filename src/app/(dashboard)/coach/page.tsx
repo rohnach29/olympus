@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import {
   Wrench,
   CheckCircle2,
   XCircle,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +28,16 @@ interface Message {
   toolsUsed?: string[];
 }
 
+const STORAGE_KEY = "olympus-coach-messages";
+
+const welcomeMessage: Message = {
+  id: "welcome",
+  role: "assistant",
+  content:
+    "Hello! I'm your Olympus AI health coach powered by Llama. I have access to your health data and can help you understand your sleep, nutrition, workouts, blood work, and longevity metrics.\n\nI can also search the web for detailed nutrition and supplement information.\n\nWhat would you like to know?",
+  timestamp: new Date(),
+};
+
 const suggestedQuestions = [
   "How did I sleep this week?",
   "What's my biological age?",
@@ -37,15 +48,8 @@ const suggestedQuestions = [
 ];
 
 export default function CoachPage() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "welcome",
-      role: "assistant",
-      content:
-        "Hello! I'm your Olympus AI health coach powered by Llama. I have access to your health data and can help you understand your sleep, nutrition, workouts, blood work, and longevity metrics.\n\nI can also search the web for detailed nutrition and supplement information.\n\nWhat would you like to know?",
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([welcomeMessage]);
+  const [isHydrated, setIsHydrated] = useState(false);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +57,42 @@ export default function CoachPage() {
     "checking" | "healthy" | "unhealthy"
   >("checking");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Load messages from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Convert timestamp strings back to Date objects
+        const restored = parsed.map((m: Message) => ({
+          ...m,
+          timestamp: new Date(m.timestamp),
+        }));
+        setMessages(restored);
+      }
+    } catch (e) {
+      console.error("Failed to load chat history:", e);
+    }
+    setIsHydrated(true);
+  }, []);
+
+  // Save messages to localStorage whenever they change
+  useEffect(() => {
+    if (isHydrated && messages.length > 0) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+      } catch (e) {
+        console.error("Failed to save chat history:", e);
+      }
+    }
+  }, [messages, isHydrated]);
+
+  // Clear chat history
+  const clearChat = useCallback(() => {
+    setMessages([welcomeMessage]);
+    localStorage.removeItem(STORAGE_KEY);
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -172,7 +212,7 @@ export default function CoachPage() {
           </p>
         </div>
 
-        {/* Server Status Indicator */}
+        {/* Server Status & Actions */}
         <div className="flex items-center gap-2">
           {serverStatus === "checking" && (
             <Badge variant="secondary" className="gap-1">
@@ -191,6 +231,17 @@ export default function CoachPage() {
               <XCircle className="h-3 w-3" />
               Agent Offline
             </Badge>
+          )}
+          {messages.length > 1 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearChat}
+              className="text-muted-foreground hover:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span className="sr-only">Clear chat</span>
+            </Button>
           )}
         </div>
       </div>
