@@ -1,6 +1,6 @@
 # Olympus
 
-An AI-powered health and longevity platform that gives LLMs real-time access to your biometrics through a custom MCP server.
+An AI-powered health platform that gives LLMs real-time access to your biometrics through a custom MCP server. Deployed on Vercel, syncs with Apple Watch.
 
 ## Why This Exists
 
@@ -25,6 +25,9 @@ The MCP server is the interesting part — it lets Claude autonomously query and
 **MCP Server** (`/mcp-server`)  
 Custom [Model Context Protocol](https://modelcontextprotocol.io/) server exposing 9 tools: health summaries, sleep analysis, HRV trends, workout logs, food logging, USDA search, blood work, and longevity metrics.
 
+**Apple Watch Integration**  
+Syncs real biometric data — sleep stages, HRV, workouts, recovery — from HealthKit.
+
 **RAG for Food Logging**  
 "I had a chicken burrito" → USDA database search → structured macro/micronutrient JSON. No manual entry.
 
@@ -36,9 +39,11 @@ Local inference with Ollama/DeepSeek for privacy, or Groq API for speed. One env
 - Next.js 16 / React 19 / TypeScript / Tailwind
 - PostgreSQL + Drizzle ORM
 - MCP server with @modelcontextprotocol/sdk
+- Apple HealthKit integration
 - Ollama or Groq for LLM
+- Deployed on Vercel
 
-## Running It
+## Running Locally
 
 ```bash
 npm install
@@ -51,12 +56,14 @@ npm run db:push
 npm run dev
 ```
 
-MCP server:
+## Using the MCP Server with Claude
+
+Build the MCP server:
 ```bash
 cd mcp-server && npm install && npm run build
 ```
 
-Add to Claude desktop config:
+Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
@@ -67,6 +74,8 @@ Add to Claude desktop config:
   }
 }
 ```
+
+Restart Claude Desktop. You can now ask Claude things like "How did I sleep last night?" or "Log that I had a chicken burrito for lunch" and it will query/update your health data directly.
 
 ## License
 
