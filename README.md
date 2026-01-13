@@ -24,9 +24,9 @@ Most health apps show you dashboards. Olympus lets you *talk* to your health dat
 ┌─────────────────────────▼───────────────────────────────────────┐
 │                   Next.js Backend (API Routes)                  │
 │  ┌──────────────┐  ┌──────────────┐  ┌────────────────────────┐ │
-│  │ Health APIs  │  │ Nutrition    │  │ LLM Client             │ │
-│  │ (sleep, hrv, │  │ (USDA search,│  │ (Ollama/Groq/vLLM)     │ │
-│  │  workouts)   │  │  food log)   │  │                        │ │
+│  │ Health APIs  │  │ Nutrition    │  │ LLM Client for simple  │ │
+│  │ (sleep, hrv, │  │ (USDA search,│  │ tasks                  │ │
+│  │  workouts)   │  │  food log)   │  │ (Ollama)               │ │
 │  └──────────────┘  └──────────────┘  └────────────────────────┘ │
 └─────────────────────────┬───────────────────────────────────────┘
                           │ Drizzle ORM
@@ -42,40 +42,36 @@ Most health apps show you dashboards. Olympus lets you *talk* to your health dat
 Built a custom [Model Context Protocol](https://modelcontextprotocol.io/) server that exposes health data as tools. This lets any MCP-compatible LLM (Claude, etc.) autonomously query sleep, HRV, nutrition, and workout data without manual copy-paste.
 
 **RAG Pipeline for Food Logging**  
-Natural language food input → USDA database search → structured nutritional JSON. Say "I had a chicken burrito" and it maps to real macro/micronutrient data.
+Natural language food input → USDA database search → structured nutritional JSON. Say "I had a chicken burrito" and it maps to REAL macro/micronutrient data.
 
 **Flexible LLM Backend**  
-Supports local models (Ollama + DeepSeek) for privacy or cloud APIs (Groq) for speed. Swap providers with one env var.
+Supports local models (Ollama/DeepSeek) for privacy or cloud APIs (Groq) for speed.
 
 **Type-Safe Database Layer**  
 Drizzle ORM with full TypeScript inference. Schema changes are caught at compile time.
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| Frontend | Next.js 16, React 19, TypeScript, Tailwind |
-| Backend | Next.js API Routes |
-| Database | PostgreSQL + Drizzle ORM |
-| MCP Server | TypeScript, @modelcontextprotocol/sdk |
-| LLM | Ollama (local) / Groq API (cloud) |
-| Auth | iron-session + bcrypt |
+Frontend | Next.js 16, React 19, TypeScript, Tailwind 
+Backend | Next.js API Routes 
+Database | PostgreSQL + Drizzle ORM 
+MCP Server | TypeScript, @modelcontextprotocol/sdk 
+LLM | Ollama (local) / Groq API (cloud) 
+Auth | iron-session + bcrypt 
 
 ## MCP Server Tools
 
 The MCP server exposes these tools to LLMs:
 
-| Tool | Description |
-|------|-------------|
-| `get_health_summary` | Today's metrics + weekly averages |
-| `get_sleep_summary` | Sleep stages, efficiency, trends |
-| `get_hrv_trend` | HRV data for recovery analysis |
-| `get_recent_workouts` | Workout history with heart rate data |
-| `get_todays_food_log` | Meals logged today with macros |
-| `log_food` | Log a meal with full nutritional data |
-| `search_foods` | Search USDA database |
-| `get_blood_work_results` | Biomarker history |
-| `get_longevity_metrics` | Biological age calculation |
+ `get_health_summary` | Today's metrics + weekly averages |
+ `get_sleep_summary` | Sleep stages, efficiency, trends |
+ `get_hrv_trend` | HRV data for recovery analysis |
+ `get_recent_workouts` | Workout history with heart rate data |
+ `get_todays_food_log` | Meals logged today with macros |
+ `log_food` | Log a meal with full nutritional data |
+ `search_foods` | Search USDA database |
+ `get_blood_work_results` | Biomarker history |
+ `get_longevity_metrics` | Biological age calculation |
 
 ## Running Locally
 
@@ -115,13 +111,6 @@ Then add to your Claude desktop config:
   }
 }
 ```
-
-## What's Next
-
-- [ ] Apple HealthKit / Google Fit sync
-- [ ] Wearable integrations (Whoop, Oura, Garmin)
-- [ ] Blood work OCR parsing
-- [ ] Biological age calculation (PhenoAge algorithm)
 
 ## License
 
