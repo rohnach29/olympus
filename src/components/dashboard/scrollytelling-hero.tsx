@@ -1,14 +1,19 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { useRef, useCallback, useMemo, useState, useEffect } from "react";
+import {
+  motion,
+  useScroll,
+  useTransform,
+  useSpring,
+  useReducedMotion,
+  useMotionValueEvent,
+  MotionValue,
+} from "framer-motion";
 
 // ============================================
 // Types
 // ============================================
-type Scene = 1 | 2 | 3 | 4 | 5 | 6;
-type RingColor = "neutral" | "green" | "orange" | "red";
-
 interface ScrollytellingHeroProps {
   userName: string;
   sleepScore: number;
@@ -20,166 +25,262 @@ interface ScrollytellingHeroProps {
 }
 
 // ============================================
-// Utility functions
+// Mist Particle Component (Orbiting)
 // ============================================
-function getScoreColor(score: number): RingColor {
-  if (score >= 75) return "green";
-  if (score >= 50) return "orange";
-  return "red";
-}
-
-function getColorHSL(color: RingColor): string {
-  switch (color) {
-    case "green":
-      return "142 71% 45%";
-    case "orange":
-      return "25 95% 53%";
-    case "red":
-      return "0 84% 60%";
-    default:
-      return "221 83% 53%";
-  }
-}
-
-// ============================================
-// Ring Component (Ethereal hollow design)
-// ============================================
-interface RingProps {
-  size: "normal" | "large";
-  color: RingColor;
-  isPremium?: boolean;
-  isActive?: boolean;
-  label?: string;
-  score?: number;
-  subtitle?: string;
-  className?: string;
+interface MistParticleProps {
+  index: number;
+  ringRadius: number;
+  colorProgress: number; // 0 = iridescent, 1 = green
   reducedMotion: boolean;
 }
 
-function Ring({
-  size,
-  color,
-  isPremium = false,
-  isActive = true,
-  label,
+function MistParticle({ index, ringRadius, colorProgress, reducedMotion }: MistParticleProps) {
+  const particleCount = 12;
+  const baseAngle = (index / particleCount) * 360;
+  const duration = 12 + (index % 5) * 3; // 12-24 seconds for slow orbit
+  const size = 60 + (index % 4) * 30; // 60-150px for large misty effect
+  const blur = 25 + (index % 3) * 15; // 25-55px blur for soft mist
+
+  // Iridescent colors
+  const iridescentColors = [
+    "hsl(180 70% 50%)", // cyan
+    "hsl(200 80% 55%)", // blue
+    "hsl(260 70% 60%)", // purple
+    "hsl(300 60% 55%)", // pink
+    "hsl(160 70% 50%)", // teal
+    "hsl(220 75% 58%)", // indigo
+  ];
+  const greenColor = "hsl(142 71% 45%)";
+
+  // Smoothly interpolate color based on progress
+  const baseColor = iridescentColors[index % iridescentColors.length];
+  const currentColor = colorProgress > 0.5 ? greenColor : baseColor;
+  const opacity = 0.35 + (1 - Math.min(colorProgress, 0.7)) * 0.25;
+
+  // For reduced motion, just show static positioned particles
+  if (reducedMotion) {
+    const x = Math.cos((baseAngle * Math.PI) / 180) * ringRadius;
+    const y = Math.sin((baseAngle * Math.PI) / 180) * ringRadius;
+    return (
+      <div
+        className="absolute rounded-full"
+        style={{
+          width: size,
+          height: size,
+          background: `radial-gradient(circle, ${currentColor} 0%, transparent 70%)`,
+          filter: `blur(${blur}px)`,
+          opacity: opacity * 0.5,
+          left: `calc(50% + ${x}px - ${size / 2}px)`,
+          top: `calc(50% + ${y}px - ${size / 2}px)`,
+        }}
+      />
+    );
+  }
+
+  // Use CSS animation for smooth orbital motion
+  const animationStyle = {
+    animation: `orbit-${index % 2 === 0 ? 'cw' : 'ccw'} ${duration}s linear infinite`,
+    animationDelay: `${-index * 1.5}s`,
+  };
+
+  return (
+    <div
+      className="absolute"
+      style={{
+        width: ringRadius * 2,
+        height: ringRadius * 2,
+        left: `calc(50% - ${ringRadius}px)`,
+        top: `calc(50% - ${ringRadius}px)`,
+        ...animationStyle,
+      }}
+    >
+      <div
+        className="absolute rounded-full transition-all duration-700"
+        style={{
+          width: size,
+          height: size,
+          background: `radial-gradient(circle, ${currentColor} 0%, transparent 70%)`,
+          filter: `blur(${blur}px)`,
+          opacity,
+          left: `calc(50% + ${ringRadius}px - ${size / 2}px)`,
+          top: `calc(50% - ${size / 2}px)`,
+          transform: `rotate(-${baseAngle}deg)`, // Counter-rotate to keep glow oriented
+        }}
+      />
+    </div>
+  );
+}
+
+// ============================================
+// Animated Ring Component (Scene 1-2)
+// ============================================
+interface AnimatedRingProps {
+  colorProgress: number; // 0 = iridescent, 1 = green
+  showScore: boolean;
+  score?: number;
+  label?: string;
+  greeting?: string;
+  reducedMotion: boolean;
+}
+
+function AnimatedRing({
+  colorProgress,
+  showScore,
   score,
-  subtitle,
-  className = "",
+  label,
+  greeting,
   reducedMotion,
-}: RingProps) {
-  const dimensions = size === "large"
-    ? { container: "w-52 h-52 md:w-64 md:h-64", svgSize: 256, strokeWidth: isPremium ? 8 : 6 }
-    : { container: "w-40 h-40 md:w-48 md:h-48", svgSize: 192, strokeWidth: 5 };
+}: AnimatedRingProps) {
+  const ringSize = 320; // Much bigger ring
+  const strokeWidth = 12; // Thicker stroke
+  const radius = (ringSize - strokeWidth * 2) / 2;
+  const center = ringSize / 2;
+  const gradientId = "main-ring-gradient";
 
-  const colorHSL = getColorHSL(color);
-  const radius = (dimensions.svgSize - dimensions.strokeWidth * 2) / 2;
-  const center = dimensions.svgSize / 2;
+  // Smooth spring for color transitions
+  const springConfig = { stiffness: 100, damping: 30 };
+  const smoothProgress = useSpring(colorProgress, springConfig);
 
-  // Generate unique gradient ID
-  const gradientId = `ring-gradient-${color}-${size}-${Math.random().toString(36).slice(2, 9)}`;
-
-  // Iridescent gradient colors for neutral state
-  const getGradientStops = () => {
-    if (color === "neutral") {
+  // Calculate interpolated colors based on progress
+  const getStrokeGradient = () => {
+    // When progress is 0, show full iridescent
+    // When progress is 1, show solid green
+    if (colorProgress < 0.3) {
       return (
         <>
-          <stop offset="0%" stopColor="hsl(180 70% 50%)" stopOpacity={0.9} />
-          <stop offset="25%" stopColor="hsl(200 80% 60%)" stopOpacity={0.85} />
-          <stop offset="50%" stopColor="hsl(260 70% 65%)" stopOpacity={0.8} />
-          <stop offset="75%" stopColor="hsl(300 60% 55%)" stopOpacity={0.75} />
-          <stop offset="100%" stopColor="hsl(180 70% 50%)" stopOpacity={0.9} />
+          <stop offset="0%" stopColor="hsl(180 70% 50%)" stopOpacity={0.95} />
+          <stop offset="20%" stopColor="hsl(200 80% 55%)" stopOpacity={0.9} />
+          <stop offset="40%" stopColor="hsl(240 70% 60%)" stopOpacity={0.85} />
+          <stop offset="60%" stopColor="hsl(280 65% 58%)" stopOpacity={0.85} />
+          <stop offset="80%" stopColor="hsl(320 60% 55%)" stopOpacity={0.9} />
+          <stop offset="100%" stopColor="hsl(180 70% 50%)" stopOpacity={0.95} />
+        </>
+      );
+    } else if (colorProgress < 0.7) {
+      // Transitioning - mix of colors shifting to green
+      const greenMix = (colorProgress - 0.3) / 0.4; // 0 to 1 during this phase
+      return (
+        <>
+          <stop offset="0%" stopColor={`hsl(${160 - greenMix * 20} ${70 + greenMix * 10}% ${50 - greenMix * 5}%)`} stopOpacity={0.95} />
+          <stop offset="25%" stopColor={`hsl(${180 - greenMix * 40} ${75 + greenMix * 5}% ${52 - greenMix * 7}%)`} stopOpacity={0.9} />
+          <stop offset="50%" stopColor={`hsl(${200 - greenMix * 60} ${70 + greenMix * 10}% ${50 - greenMix * 5}%)`} stopOpacity={0.9} />
+          <stop offset="75%" stopColor={`hsl(${170 - greenMix * 30} ${72 + greenMix * 8}% ${48 - greenMix * 3}%)`} stopOpacity={0.9} />
+          <stop offset="100%" stopColor={`hsl(${160 - greenMix * 20} ${70 + greenMix * 10}% ${50 - greenMix * 5}%)`} stopOpacity={0.95} />
+        </>
+      );
+    } else {
+      // Full green
+      return (
+        <>
+          <stop offset="0%" stopColor="hsl(142 76% 42%)" stopOpacity={0.95} />
+          <stop offset="50%" stopColor="hsl(142 71% 45%)" stopOpacity={1} />
+          <stop offset="100%" stopColor="hsl(142 76% 42%)" stopOpacity={0.95} />
         </>
       );
     }
-    // Solid color with slight variation for depth
-    return (
-      <>
-        <stop offset="0%" stopColor={`hsl(${colorHSL})`} stopOpacity={0.95} />
-        <stop offset="50%" stopColor={`hsl(${colorHSL})`} stopOpacity={1} />
-        <stop offset="100%" stopColor={`hsl(${colorHSL})`} stopOpacity={0.95} />
-      </>
-    );
   };
 
-  const glowIntensity = isActive ? (isPremium ? 1 : 0.7) : 0.3;
+  // Glow color based on progress
+  const glowColor = colorProgress > 0.7
+    ? "hsl(142 71% 45%)"
+    : colorProgress > 0.3
+      ? `hsl(${180 - colorProgress * 40} 70% 50%)`
+      : "hsl(200 75% 55%)";
 
   return (
-    <motion.div
-      className={`relative flex items-center justify-center ${dimensions.container} ${className}`}
-      animate={
-        !reducedMotion && isActive
-          ? {
-              scale: [1, 1.02, 1],
-            }
-          : {}
-      }
-      transition={
-        !reducedMotion
-          ? {
-              duration: 4,
-              repeat: Infinity,
-              ease: "easeInOut",
-            }
-          : {}
-      }
+    <div
+      className="relative flex items-center justify-center"
+      style={{ width: ringSize, height: ringSize }}
     >
-      {/* Outer glow layer (blurred duplicate) */}
-      <svg
-        className="absolute inset-0 w-full h-full"
-        viewBox={`0 0 ${dimensions.svgSize} ${dimensions.svgSize}`}
+      {/* Mist particles container */}
+      <div
+        className="absolute inset-0 flex items-center justify-center"
+        style={{ width: ringSize, height: ringSize }}
+      >
+        {Array.from({ length: 12 }).map((_, i) => (
+          <MistParticle
+            key={i}
+            index={i}
+            ringRadius={radius}
+            colorProgress={colorProgress}
+            reducedMotion={reducedMotion}
+          />
+        ))}
+      </div>
+
+      {/* Outer diffuse glow */}
+      <motion.div
+        className="absolute rounded-full"
         style={{
-          filter: `blur(${isPremium ? 20 : 15}px)`,
-          opacity: glowIntensity * 0.6,
+          width: ringSize + 100,
+          height: ringSize + 100,
+          background: `radial-gradient(circle, ${glowColor}20 0%, ${glowColor}10 30%, transparent 70%)`,
+          filter: "blur(40px)",
+        }}
+        animate={!reducedMotion ? {
+          scale: [1, 1.05, 1],
+          opacity: [0.6, 0.8, 0.6],
+        } : {}}
+        transition={{
+          duration: 4,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      />
+
+      {/* Secondary glow layer */}
+      <svg
+        className="absolute"
+        width={ringSize + 60}
+        height={ringSize + 60}
+        viewBox={`0 0 ${ringSize + 60} ${ringSize + 60}`}
+        style={{
+          filter: "blur(25px)",
+          opacity: 0.5,
         }}
       >
         <defs>
           <linearGradient id={`${gradientId}-glow`} x1="0%" y1="0%" x2="100%" y2="100%">
-            {getGradientStops()}
+            {getStrokeGradient()}
           </linearGradient>
         </defs>
         <circle
-          cx={center}
-          cy={center}
+          cx={(ringSize + 60) / 2}
+          cy={(ringSize + 60) / 2}
           r={radius}
           fill="none"
           stroke={`url(#${gradientId}-glow)`}
-          strokeWidth={dimensions.strokeWidth * 3}
+          strokeWidth={strokeWidth * 4}
         />
       </svg>
 
-      {/* Secondary glow layer */}
-      <svg
-        className="absolute inset-0 w-full h-full"
-        viewBox={`0 0 ${dimensions.svgSize} ${dimensions.svgSize}`}
-        style={{
-          filter: `blur(${isPremium ? 12 : 8}px)`,
-          opacity: glowIntensity * 0.8,
+      {/* Main ring with pulsating effect */}
+      <motion.svg
+        className="absolute"
+        width={ringSize}
+        height={ringSize}
+        viewBox={`0 0 ${ringSize} ${ringSize}`}
+        animate={!reducedMotion ? {
+          scale: [1, 1.02, 1],
+        } : {}}
+        transition={{
+          duration: 3,
+          repeat: Infinity,
+          ease: "easeInOut",
         }}
       >
         <defs>
-          <linearGradient id={`${gradientId}-glow2`} x1="0%" y1="100%" x2="100%" y2="0%">
-            {getGradientStops()}
-          </linearGradient>
-        </defs>
-        <circle
-          cx={center}
-          cy={center}
-          r={radius}
-          fill="none"
-          stroke={`url(#${gradientId}-glow2)`}
-          strokeWidth={dimensions.strokeWidth * 2}
-        />
-      </svg>
-
-      {/* Main ring */}
-      <svg
-        className="absolute inset-0 w-full h-full"
-        viewBox={`0 0 ${dimensions.svgSize} ${dimensions.svgSize}`}
-      >
-        <defs>
           <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
-            {getGradientStops()}
+            {getStrokeGradient()}
           </linearGradient>
+          {/* Glow filter */}
+          <filter id="ring-glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="4" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
         </defs>
         <circle
           cx={center}
@@ -187,472 +288,233 @@ function Ring({
           r={radius}
           fill="none"
           stroke={`url(#${gradientId})`}
-          strokeWidth={dimensions.strokeWidth}
+          strokeWidth={strokeWidth}
           strokeLinecap="round"
+          filter="url(#ring-glow)"
         />
-      </svg>
+      </motion.svg>
 
-      {/* Inner subtle ring for depth */}
+      {/* Inner subtle highlight ring */}
       <svg
-        className="absolute inset-0 w-full h-full"
-        viewBox={`0 0 ${dimensions.svgSize} ${dimensions.svgSize}`}
-        style={{ opacity: 0.3 }}
+        className="absolute"
+        width={ringSize}
+        height={ringSize}
+        viewBox={`0 0 ${ringSize} ${ringSize}`}
+        style={{ opacity: 0.15 }}
       >
         <circle
           cx={center}
           cy={center}
-          r={radius - dimensions.strokeWidth}
+          r={radius - strokeWidth * 1.5}
           fill="none"
           stroke="white"
           strokeWidth={1}
-          opacity={0.2}
         />
       </svg>
 
-      {/* Content overlay */}
-      <AnimatePresence mode="wait">
-        {label && (
-          <motion.div
-            key={label}
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -5 }}
-            transition={{ duration: reducedMotion ? 0.15 : 0.3 }}
-            className="absolute inset-0 flex flex-col items-center justify-center text-center z-10"
-          >
+      {/* Content inside ring */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
+        {/* Greeting (fades out as score fades in) */}
+        <motion.div
+          className="text-center"
+          animate={{
+            opacity: showScore ? 0 : 1,
+            y: showScore ? -10 : 0,
+          }}
+          transition={{ duration: 0.5 }}
+        >
+          {greeting && (
+            <p className="text-2xl md:text-3xl font-light text-white/90">
+              {greeting}
+            </p>
+          )}
+        </motion.div>
+
+        {/* Score (fades in) */}
+        <motion.div
+          className="absolute inset-0 flex flex-col items-center justify-center text-center"
+          animate={{
+            opacity: showScore ? 1 : 0,
+            y: showScore ? 0 : 10,
+          }}
+          transition={{ duration: 0.5, delay: showScore ? 0.2 : 0 }}
+        >
+          {label && (
             <p className="text-xs md:text-sm text-white/70 uppercase tracking-wider mb-1">
               {label}
             </p>
-            {score !== undefined && (
-              <p
-                className="text-4xl md:text-5xl font-light"
-                style={{ color: `hsl(${colorHSL})` }}
-              >
-                {score}
-              </p>
-            )}
-            {subtitle && (
-              <p className="text-xs text-white/50 mt-1">{subtitle}</p>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+          )}
+          {score !== undefined && (
+            <p
+              className="text-5xl md:text-6xl font-light"
+              style={{ color: "hsl(142 71% 45%)" }}
+            >
+              {score}
+            </p>
+          )}
+          <p className="text-xs text-white/50 mt-1">Last night</p>
+        </motion.div>
+      </div>
+    </div>
   );
 }
 
 // ============================================
-// Connector Component (Flowing energy wave)
+// Dynamic Background Component
 // ============================================
-interface ConnectorProps {
-  isActive: boolean;
-  reducedMotion: boolean;
+interface DynamicBackgroundProps {
+  colorProgress: number;
 }
 
-function Connector({ isActive, reducedMotion }: ConnectorProps) {
-  const connectorId = `connector-${Math.random().toString(36).slice(2, 9)}`;
+function DynamicBackground({ colorProgress }: DynamicBackgroundProps) {
+  // Background shifts from iridescent tinge to green tinge
+  const bgColor1 = colorProgress > 0.5
+    ? "hsl(142 50% 8%)"
+    : "hsl(200 40% 8%)";
+  const bgColor2 = colorProgress > 0.5
+    ? "hsl(142 30% 5%)"
+    : "hsl(260 30% 6%)";
+  const accentColor = colorProgress > 0.5
+    ? "hsl(142 60% 20%)"
+    : "hsl(200 50% 15%)";
 
   return (
-    <motion.div
-      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 md:w-48 h-24"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: isActive ? 1 : 0 }}
-      transition={{ duration: reducedMotion ? 0.15 : 0.8 }}
-    >
-      {/* Outer glow layer */}
-      <svg
-        className="absolute inset-0 w-full h-full"
-        viewBox="0 0 200 100"
-        preserveAspectRatio="none"
-        style={{
-          filter: "blur(12px)",
-          opacity: isActive ? 0.5 : 0.2,
-        }}
-      >
-        <defs>
-          <linearGradient id={`${connectorId}-glow`} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="hsl(180 70% 50%)" stopOpacity={0.8} />
-            <stop offset="50%" stopColor="hsl(200 80% 60%)" stopOpacity={0.9} />
-            <stop offset="100%" stopColor="hsl(160 70% 55%)" stopOpacity={0.8} />
-          </linearGradient>
-        </defs>
-        <path
-          d="M 0 50 Q 50 20, 100 50 Q 150 80, 200 50"
-          fill="none"
-          stroke={`url(#${connectorId}-glow)`}
-          strokeWidth={8}
-          strokeLinecap="round"
-        />
-      </svg>
-
-      {/* Secondary wave layer */}
-      <svg
-        className="absolute inset-0 w-full h-full"
-        viewBox="0 0 200 100"
-        preserveAspectRatio="none"
-        style={{
-          filter: "blur(6px)",
-          opacity: isActive ? 0.6 : 0.3,
-        }}
-      >
-        <defs>
-          <linearGradient id={`${connectorId}-wave2`} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="hsl(260 70% 65%)" stopOpacity={0.6} />
-            <stop offset="50%" stopColor="hsl(200 75% 55%)" stopOpacity={0.8} />
-            <stop offset="100%" stopColor="hsl(180 70% 50%)" stopOpacity={0.6} />
-          </linearGradient>
-        </defs>
-        <path
-          d="M 0 50 Q 50 70, 100 50 Q 150 30, 200 50"
-          fill="none"
-          stroke={`url(#${connectorId}-wave2)`}
-          strokeWidth={4}
-          strokeLinecap="round"
-        />
-      </svg>
-
-      {/* Main wave line */}
-      <svg
-        className="absolute inset-0 w-full h-full"
-        viewBox="0 0 200 100"
-        preserveAspectRatio="none"
-      >
-        <defs>
-          <linearGradient id={`${connectorId}-main`} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="hsl(180 70% 50%)" stopOpacity={0.9} />
-            <stop offset="30%" stopColor="hsl(200 80% 60%)" stopOpacity={1} />
-            <stop offset="70%" stopColor="hsl(200 80% 60%)" stopOpacity={1} />
-            <stop offset="100%" stopColor="hsl(160 70% 55%)" stopOpacity={0.9} />
-          </linearGradient>
-        </defs>
-        <motion.path
-          d="M 0 50 Q 50 30, 100 50 Q 150 70, 200 50"
-          fill="none"
-          stroke={`url(#${connectorId}-main)`}
-          strokeWidth={2}
-          strokeLinecap="round"
-          initial={{ pathLength: 0, opacity: 0 }}
-          animate={{
-            pathLength: isActive ? 1 : 0,
-            opacity: isActive ? 1 : 0,
-          }}
-          transition={{
-            duration: reducedMotion ? 0.2 : 1,
-            ease: "easeInOut",
-          }}
-        />
-      </svg>
-    </motion.div>
-  );
-}
-
-// ============================================
-// Recommendation Card Component (Frosted glass)
-// ============================================
-interface RecommendationCardProps {
-  title: string;
-  body: string;
-}
-
-function RecommendationCard({ title, body }: RecommendationCardProps) {
-  const cardId = `card-${Math.random().toString(36).slice(2, 9)}`;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.3 }}
-      className="mt-10 relative max-w-md mx-auto"
-    >
-      {/* Outer glow effect */}
+    <div className="fixed inset-0 -z-10">
+      {/* Base gradient */}
       <div
-        className="absolute -inset-1 rounded-3xl opacity-40"
+        className="absolute inset-0 transition-colors duration-1000"
         style={{
-          background: `linear-gradient(135deg,
-            hsl(180 60% 50% / 0.3) 0%,
-            hsl(200 70% 55% / 0.2) 50%,
-            hsl(260 60% 60% / 0.3) 100%
-          )`,
-          filter: "blur(20px)",
+          background: `
+            radial-gradient(ellipse at 30% 20%, ${accentColor}15 0%, transparent 50%),
+            radial-gradient(ellipse at 70% 80%, ${bgColor2} 0%, transparent 60%),
+            radial-gradient(ellipse at 50% 50%, ${bgColor1} 0%, hsl(0 0% 4%) 100%)
+          `,
         }}
       />
 
-      {/* Card border glow */}
-      <svg
-        className="absolute -inset-0.5 w-[calc(100%+4px)] h-[calc(100%+4px)]"
-        style={{ filter: "blur(8px)", opacity: 0.5 }}
-      >
-        <defs>
-          <linearGradient id={`${cardId}-border`} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="hsl(180 70% 50%)" stopOpacity={0.6} />
-            <stop offset="50%" stopColor="hsl(200 80% 60%)" stopOpacity={0.4} />
-            <stop offset="100%" stopColor="hsl(260 70% 65%)" stopOpacity={0.6} />
-          </linearGradient>
-        </defs>
-        <rect
-          x="2"
-          y="2"
-          width="calc(100% - 4px)"
-          height="calc(100% - 4px)"
-          rx="24"
-          ry="24"
-          fill="none"
-          stroke={`url(#${cardId}-border)`}
-          strokeWidth="2"
-        />
-      </svg>
-
-      {/* Main card */}
-      <div
-        className="relative px-6 py-5 rounded-3xl"
+      {/* Ambient glow spots */}
+      <motion.div
+        className="absolute w-96 h-96 rounded-full opacity-20"
         style={{
-          background: `linear-gradient(135deg,
-            hsl(180 30% 20% / 0.15) 0%,
-            hsl(200 25% 15% / 0.2) 50%,
-            hsl(180 30% 18% / 0.15) 100%
-          )`,
-          backdropFilter: "blur(20px)",
-          border: "1px solid hsl(180 50% 60% / 0.15)",
-          boxShadow: `
-            inset 0 1px 0 0 hsl(180 50% 80% / 0.1),
-            inset 0 -1px 0 0 hsl(0 0% 0% / 0.2)
-          `,
+          background: colorProgress > 0.5
+            ? "radial-gradient(circle, hsl(142 60% 30%) 0%, transparent 70%)"
+            : "radial-gradient(circle, hsl(200 60% 30%) 0%, transparent 70%)",
+          filter: "blur(60px)",
+          top: "10%",
+          left: "20%",
         }}
-      >
-        <p className="text-xs text-white/60 uppercase tracking-wider mb-2">
-          {title}
-        </p>
-        <p className="text-white/90 leading-relaxed">{body}</p>
-      </div>
-    </motion.div>
+        animate={{
+          x: [0, 30, 0],
+          y: [0, 20, 0],
+        }}
+        transition={{
+          duration: 10,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      />
+      <motion.div
+        className="absolute w-80 h-80 rounded-full opacity-15"
+        style={{
+          background: colorProgress > 0.5
+            ? "radial-gradient(circle, hsl(160 50% 25%) 0%, transparent 70%)"
+            : "radial-gradient(circle, hsl(280 50% 25%) 0%, transparent 70%)",
+          filter: "blur(50px)",
+          bottom: "15%",
+          right: "15%",
+        }}
+        animate={{
+          x: [0, -20, 0],
+          y: [0, -30, 0],
+        }}
+        transition={{
+          duration: 12,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      />
+    </div>
   );
 }
 
 // ============================================
-// Scene Stage Component
+// Scroll-Reactive Ring Wrapper
 // ============================================
-interface SceneStageProps {
-  scene: Scene;
-  userName: string;
+interface ScrollReactiveRingProps {
+  colorProgress: MotionValue<number>;
   sleepScore: number;
-  recoveryScore: number;
-  readinessScore: number;
-  recommendationText: string;
+  greeting: string;
   reducedMotion: boolean;
 }
 
-function SceneStage({
-  scene,
-  userName,
+function ScrollReactiveRing({
+  colorProgress,
   sleepScore,
-  recoveryScore,
-  readinessScore,
-  recommendationText,
+  greeting,
   reducedMotion,
-}: SceneStageProps) {
-  const sleepColor = getScoreColor(sleepScore);
-  const recoveryColor = getScoreColor(recoveryScore);
-  const readinessColor = getScoreColor(readinessScore);
+}: ScrollReactiveRingProps) {
+  const [progress, setProgress] = useState(0);
+  const [showScore, setShowScore] = useState(false);
 
-  const transitionDuration = reducedMotion ? 0.15 : 0.5;
-  const transitionEase = [0.4, 0, 0.2, 1] as const;
+  useMotionValueEvent(colorProgress, "change", (latest) => {
+    setProgress(latest);
+    setShowScore(latest > 0.6);
+  });
 
   return (
-    <div className="relative flex flex-col items-center justify-center min-h-screen px-4">
-      {/* Scene 1: Greeting */}
-      <AnimatePresence mode="wait">
-        {scene === 1 && (
-          <motion.div
-            key="scene1"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: transitionDuration, ease: transitionEase }}
-            className="flex flex-col items-center"
-          >
-            <Ring
-              size="normal"
-              color="neutral"
-              reducedMotion={reducedMotion}
-            />
-            <motion.h1
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2, duration: transitionDuration }}
-              className="mt-8 text-2xl md:text-3xl font-light text-white/90"
-            >
-              Good morning, {userName}
-            </motion.h1>
-          </motion.div>
-        )}
+    <AnimatedRing
+      colorProgress={progress}
+      showScore={showScore}
+      score={sleepScore}
+      label="Sleep"
+      greeting={greeting}
+      reducedMotion={reducedMotion}
+    />
+  );
+}
 
-        {/* Scene 2: Sleep reveal */}
-        {scene === 2 && (
-          <motion.div
-            key="scene2"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: transitionDuration, ease: transitionEase }}
-            className="flex flex-col items-center"
-          >
-            <Ring
-              size="normal"
-              color={sleepColor}
-              label="Sleep"
-              score={sleepScore}
-              subtitle="Last night"
-              reducedMotion={reducedMotion}
-            />
-            <motion.h1
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2, duration: transitionDuration }}
-              className="mt-8 text-2xl md:text-3xl font-light text-white/90"
-            >
-              Good morning, {userName}
-            </motion.h1>
-          </motion.div>
-        )}
+// ============================================
+// Scroll-Reactive Background Wrapper
+// ============================================
+interface ScrollReactiveBackgroundProps {
+  colorProgress: MotionValue<number>;
+}
 
-        {/* Scene 3: Split into 2 bubbles */}
-        {scene === 3 && (
-          <motion.div
-            key="scene3"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: transitionDuration, ease: transitionEase }}
-            className="flex flex-col items-center"
-          >
-            <div className="relative flex items-center justify-center gap-16 md:gap-24">
-              <motion.div
-                initial={{ x: 0 }}
-                animate={{ x: 0 }}
-                transition={{ duration: transitionDuration, ease: transitionEase }}
-              >
-                <Ring
-                  size="normal"
-                  color={sleepColor}
-                  label="Sleep"
-                  score={sleepScore}
-                  subtitle="Last night"
-                  reducedMotion={reducedMotion}
-                />
-              </motion.div>
+function ScrollReactiveBackground({ colorProgress }: ScrollReactiveBackgroundProps) {
+  const [progress, setProgress] = useState(0);
 
-              <Connector isActive={false} reducedMotion={reducedMotion} />
+  useMotionValueEvent(colorProgress, "change", (latest) => {
+    setProgress(latest);
+  });
 
-              <motion.div
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{
-                  duration: reducedMotion ? 0.15 : 0.6,
-                  ease: transitionEase,
-                }}
-              >
-                <Ring
-                  size="normal"
-                  color="neutral"
-                  isActive={false}
-                  reducedMotion={reducedMotion}
-                />
-              </motion.div>
-            </div>
-          </motion.div>
-        )}
+  return <DynamicBackground colorProgress={progress} />;
+}
 
-        {/* Scene 4: Recovery reveal */}
-        {scene === 4 && (
-          <motion.div
-            key="scene4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: transitionDuration, ease: transitionEase }}
-            className="flex flex-col items-center"
-          >
-            <div className="relative flex items-center justify-center gap-16 md:gap-24">
-              <Ring
-                size="normal"
-                color={sleepColor}
-                label="Sleep"
-                score={sleepScore}
-                subtitle="Last night"
-                reducedMotion={reducedMotion}
-              />
+// ============================================
+// Progress Indicator Dot
+// ============================================
+interface ProgressDotProps {
+  threshold: number;
+  smoothProgress: MotionValue<number>;
+}
 
-              <Connector isActive={true} reducedMotion={reducedMotion} />
+function ProgressDot({ threshold, smoothProgress }: ProgressDotProps) {
+  const scale = useTransform(
+    smoothProgress,
+    [Math.max(0, threshold - 0.1), threshold],
+    [1, 1.3]
+  );
+  const opacity = useTransform(
+    smoothProgress,
+    [Math.max(0, threshold - 0.1), threshold],
+    [0.3, 1]
+  );
 
-              <Ring
-                size="normal"
-                color={recoveryColor}
-                label="Recovery"
-                score={recoveryScore}
-                reducedMotion={reducedMotion}
-              />
-            </div>
-          </motion.div>
-        )}
-
-        {/* Scene 5: Merge into Readiness */}
-        {scene === 5 && (
-          <motion.div
-            key="scene5"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: transitionDuration, ease: transitionEase }}
-            className="flex flex-col items-center"
-          >
-            <motion.div
-              initial={reducedMotion ? { opacity: 0 } : { scale: 0.8, opacity: 0 }}
-              animate={reducedMotion ? { opacity: 1 } : { scale: 1, opacity: 1 }}
-              transition={{
-                duration: reducedMotion ? 0.15 : 0.7,
-                ease: [0.34, 1.56, 0.64, 1],
-              }}
-            >
-              <Ring
-                size="large"
-                color={readinessColor}
-                isPremium
-                label="Readiness"
-                score={readinessScore}
-                subtitle="Ready for today"
-                reducedMotion={reducedMotion}
-              />
-            </motion.div>
-          </motion.div>
-        )}
-
-        {/* Scene 6: Recommendation */}
-        {scene === 6 && (
-          <motion.div
-            key="scene6"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: transitionDuration, ease: transitionEase }}
-            className="flex flex-col items-center"
-          >
-            <Ring
-              size="large"
-              color={readinessColor}
-              isPremium
-              label="Readiness"
-              score={readinessScore}
-              subtitle="Ready for today"
-              reducedMotion={reducedMotion}
-            />
-            <RecommendationCard
-              title="Today's Recommendation"
-              body={recommendationText}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+  return (
+    <motion.div
+      className="w-2 h-2 rounded-full bg-white/20"
+      style={{ scale, opacity }}
+    />
   );
 }
 
@@ -668,64 +530,50 @@ export function ScrollytellingHero({
   onComplete,
   onSkip,
 }: ScrollytellingHeroProps) {
-  const [currentScene, setCurrentScene] = useState<Scene>(1);
-  const sectionRefs = useRef<(HTMLDivElement | null)[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion() ?? false;
 
-  // Intersection observer for scene detection
-  useEffect(() => {
-    const observers: IntersectionObserver[] = [];
+  // Track scroll progress through the entire container
+  const { scrollYProgress } = useScroll({
+    target: containerRef,
+    offset: ["start start", "end end"],
+  });
 
-    sectionRefs.current.forEach((section, index) => {
-      if (!section) return;
+  // Smooth the scroll progress
+  const smoothProgress = useSpring(scrollYProgress, {
+    stiffness: 100,
+    damping: 30,
+    restDelta: 0.001,
+  });
 
-      const observer = new IntersectionObserver(
-        (entries) => {
-          entries.forEach((entry) => {
-            if (entry.isIntersecting) {
-              setCurrentScene((index + 1) as Scene);
-            }
-          });
-        },
-        {
-          threshold: 0.6,
-          rootMargin: "-20% 0px -20% 0px",
-        }
-      );
+  // Scene 1 → 2 transition happens in first 33% of scroll
+  const scene1to2Progress = useTransform(smoothProgress, [0, 0.33], [0, 1]);
 
-      observer.observe(section);
-      observers.push(observer);
-    });
+  // Opacity for the main ring container
+  const ringOpacity = useTransform(smoothProgress, [0, 0.4, 0.5], [1, 1, 0]);
 
-    return () => {
-      observers.forEach((observer) => observer.disconnect());
-    };
-  }, []);
+  // Opacity for scroll hint
+  const hintOpacity = useTransform(smoothProgress, [0, 0.05], [1, 0]);
 
-  // Handle completion when scene 6 is reached
-  useEffect(() => {
-    if (currentScene === 6) {
-      const timer = setTimeout(() => {
-        onComplete();
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [currentScene, onComplete]);
+  // Get greeting based on time of day
+  const getGreeting = useCallback(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return `Good morning, ${userName}`;
+    if (hour < 17) return `Good afternoon, ${userName}`;
+    return `Good evening, ${userName}`;
+  }, [userName]);
 
-  const setSectionRef = useCallback(
-    (index: number) => (el: HTMLDivElement | null) => {
-      sectionRefs.current[index] = el;
-    },
-    []
-  );
+  const greeting = useMemo(() => getGreeting(), [getGreeting]);
 
   return (
     <div
       ref={containerRef}
-      className="relative bg-[hsl(0_0%_7%)]"
-      style={{ isolation: "isolate" }}
+      className="relative"
+      style={{ height: "300vh" }} // 3x viewport for scroll room
     >
+      {/* Dynamic background */}
+      <ScrollReactiveBackground colorProgress={scene1to2Progress} />
+
       {/* Skip button */}
       <motion.button
         initial={{ opacity: 0 }}
@@ -734,84 +582,57 @@ export function ScrollytellingHero({
         onClick={onSkip}
         className="fixed top-6 right-6 z-50 px-4 py-2 text-sm text-white/60 hover:text-white/90
                    bg-white/5 hover:bg-white/10 rounded-full border border-white/10
-                   transition-colors duration-200"
+                   transition-colors duration-200 backdrop-blur-sm"
       >
         Skip
       </motion.button>
 
-      {/* Scene indicator */}
+      {/* Progress indicator */}
       <div className="fixed left-6 top-1/2 -translate-y-1/2 z-50 flex flex-col gap-2">
-        {[1, 2, 3, 4, 5, 6].map((scene) => (
-          <motion.div
-            key={scene}
-            className="w-2 h-2 rounded-full"
-            animate={{
-              backgroundColor:
-                currentScene >= scene
-                  ? "hsl(0 0% 100% / 0.8)"
-                  : "hsl(0 0% 100% / 0.2)",
-              scale: currentScene === scene ? 1.3 : 1,
-            }}
-            transition={{ duration: 0.2 }}
-          />
+        {[0, 0.33, 0.66, 1].map((threshold, i) => (
+          <ProgressDot key={i} threshold={threshold} smoothProgress={smoothProgress} />
         ))}
       </div>
 
-      {/* Sticky stage */}
+      {/* Sticky viewport for the animation */}
       <div className="sticky top-0 h-screen flex items-center justify-center overflow-hidden">
-        <SceneStage
-          scene={currentScene}
-          userName={userName}
-          sleepScore={sleepScore}
-          recoveryScore={recoveryScore}
-          readinessScore={readinessScore}
-          recommendationText={recommendationText}
-          reducedMotion={prefersReducedMotion}
-        />
-      </div>
-
-      {/* Scroll track - invisible sections that trigger scene changes */}
-      <div className="relative" style={{ marginTop: "-100vh" }}>
-        {[1, 2, 3, 4, 5, 6].map((scene) => (
-          <div
-            key={scene}
-            ref={setSectionRef(scene - 1)}
-            className="h-screen"
-            aria-hidden="true"
-          />
-        ))}
-      </div>
-
-      {/* Continue indicator at bottom of last scene */}
-      {currentScene === 6 && (
+        {/* Scene 1-2: Ring with greeting → sleep score */}
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1, duration: 0.5 }}
-          className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50"
+          className="flex flex-col items-center"
+          style={{ opacity: ringOpacity }}
         >
-          <button
-            onClick={onComplete}
-            className="flex flex-col items-center gap-2 text-white/60 hover:text-white/90 transition-colors"
-          >
-            <span className="text-sm">Continue to Dashboard</span>
-            <motion.svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              animate={{ y: [0, 4, 0] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-            >
-              <path d="M12 5v14M19 12l-7 7-7-7" />
-            </motion.svg>
-          </button>
+          <ScrollReactiveRing
+            colorProgress={scene1to2Progress}
+            sleepScore={sleepScore}
+            greeting={greeting}
+            reducedMotion={prefersReducedMotion}
+          />
         </motion.div>
-      )}
+      </div>
+
+      {/* Continue indicator */}
+      <motion.div
+        className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50"
+        style={{ opacity: hintOpacity }}
+      >
+        <div className="flex flex-col items-center gap-2 text-white/40">
+          <span className="text-sm">Scroll to explore</span>
+          <motion.svg
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            animate={{ y: [0, 4, 0] }}
+            transition={{ duration: 1.5, repeat: Infinity }}
+          >
+            <path d="M12 5v14M19 12l-7 7-7-7" />
+          </motion.svg>
+        </div>
+      </motion.div>
     </div>
   );
 }
