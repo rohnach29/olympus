@@ -49,8 +49,10 @@ export function ScrollytellingWrapper({
   const [isExiting, setIsExiting] = useState(false);
 
   // Check localStorage on mount
+  // TODO: Remove this override after testing - always show scrollytelling
   useEffect(() => {
-    setShowScrolly(!hasShownToday());
+    setShowScrolly(true); // Always show for testing
+    // setShowScrolly(!hasShownToday()); // Original behavior
   }, []);
 
   const handleComplete = useCallback(() => {
