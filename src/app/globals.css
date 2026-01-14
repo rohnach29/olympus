@@ -235,3 +235,42 @@ body {
     transform: scale(1.05);
   }
 }
+
+/* Tubular ring - Multi-layer swirl animations */
+@keyframes swirl-cw-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes swirl-ccw-med {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+
+@keyframes swirl-cw-fast {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Wisp emanation animations */
+@keyframes wisp-drift {
+  0%, 100% {
+    opacity: 0.3;
+    transform: translateX(0) translateY(0) scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: translateX(10px) translateY(-5px) scale(1.1);
+  }
+}
+
+@keyframes wisp-pulse {
+  0%, 100% {
+    opacity: 0.25;
+    filter: blur(40px);
+  }
+  50% {
+    opacity: 0.45;
+    filter: blur(35px);
+  }
+}

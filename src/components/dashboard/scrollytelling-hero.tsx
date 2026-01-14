@@ -45,13 +45,14 @@ function AmbientMist({ colorProgress, reducedMotion }: AmbientMistProps) {
     { x: "40%", y: "85%", size: 240, duration: 24, color: "blue", delay: 10 },
   ];
 
+  // Softer, more muted colors
   const colorMap: Record<string, string> = {
-    cyan: colorProgress > 0.5 ? "hsl(150 60% 40%)" : "hsl(180 60% 45%)",
-    blue: colorProgress > 0.5 ? "hsl(145 55% 38%)" : "hsl(210 65% 50%)",
-    purple: colorProgress > 0.5 ? "hsl(155 50% 35%)" : "hsl(270 55% 50%)",
-    pink: colorProgress > 0.5 ? "hsl(148 58% 42%)" : "hsl(320 50% 50%)",
-    teal: colorProgress > 0.5 ? "hsl(152 62% 40%)" : "hsl(175 55% 45%)",
-    indigo: colorProgress > 0.5 ? "hsl(147 52% 37%)" : "hsl(240 50% 48%)",
+    cyan: colorProgress > 0.5 ? "hsl(150 40% 38%)" : "hsl(180 35% 42%)",
+    blue: colorProgress > 0.5 ? "hsl(148 38% 36%)" : "hsl(205 32% 45%)",
+    purple: colorProgress > 0.5 ? "hsl(152 35% 34%)" : "hsl(260 28% 45%)",
+    pink: colorProgress > 0.5 ? "hsl(150 40% 38%)" : "hsl(300 25% 45%)",
+    teal: colorProgress > 0.5 ? "hsl(155 42% 38%)" : "hsl(175 32% 42%)",
+    indigo: colorProgress > 0.5 ? "hsl(148 36% 35%)" : "hsl(230 28% 44%)",
   };
 
   return (
@@ -87,88 +88,74 @@ function AmbientMist({ colorProgress, reducedMotion }: AmbientMistProps) {
 }
 
 // ============================================
-// Ring Orbiting Mist Particles
+// Emanating Wisps Component (Smoke from ring)
 // ============================================
-interface RingMistProps {
+interface EmanatingWispsProps {
   ringRadius: number;
   colorProgress: number;
   reducedMotion: boolean;
 }
 
-function RingMist({ ringRadius, colorProgress, reducedMotion }: RingMistProps) {
-  const particles = Array.from({ length: 16 }, (_, i) => ({
-    index: i,
-    baseAngle: (i / 16) * 360,
-    duration: 15 + (i % 6) * 4,
-    size: 80 + (i % 4) * 40,
-    blur: 35 + (i % 3) * 20,
-    orbitRadius: ringRadius + (i % 3 - 1) * 30, // Vary orbit slightly
-  }));
-
-  const iridescentColors = [
-    "hsl(180 70% 50%)",
-    "hsl(200 75% 55%)",
-    "hsl(260 65% 58%)",
-    "hsl(300 55% 52%)",
-    "hsl(160 65% 48%)",
-    "hsl(220 70% 55%)",
-    "hsl(280 60% 55%)",
-    "hsl(175 68% 50%)",
+function EmanatingWisps({ ringRadius, colorProgress, reducedMotion }: EmanatingWispsProps) {
+  // Wisps positioned around the ring, extending outward
+  const wisps = [
+    { angle: 30, length: 120, width: 60, outward: true, delay: 0 },
+    { angle: 75, length: 90, width: 45, outward: true, delay: 1.5 },
+    { angle: 120, length: 140, width: 70, outward: true, delay: 0.8 },
+    { angle: 165, length: 100, width: 50, outward: false, delay: 2.2 }, // inward
+    { angle: 210, length: 130, width: 65, outward: true, delay: 1.2 },
+    { angle: 255, length: 85, width: 40, outward: true, delay: 2.8 },
+    { angle: 300, length: 110, width: 55, outward: false, delay: 0.5 }, // inward
+    { angle: 345, length: 95, width: 48, outward: true, delay: 1.8 },
   ];
-  const greenColor = "hsl(142 71% 45%)";
+
+  // Softer color palette
+  const softColors = [
+    "hsl(175 40% 48%)", // soft cyan
+    "hsl(200 35% 52%)", // muted blue
+    "hsl(220 30% 55%)", // soft blue
+    "hsl(260 28% 52%)", // soft lavender
+    "hsl(175 38% 50%)", // teal
+    "hsl(195 32% 50%)", // blue-cyan
+  ];
+  const greenColor = "hsl(145 50% 42%)";
 
   return (
     <div className="absolute inset-0 pointer-events-none">
-      {particles.map((p) => {
-        const color = colorProgress > 0.5 ? greenColor : iridescentColors[p.index % iridescentColors.length];
-        const opacity = 0.4 + (1 - Math.min(colorProgress, 0.7)) * 0.3;
+      {wisps.map((wisp, i) => {
+        const color = colorProgress > 0.5 ? greenColor : softColors[i % softColors.length];
+        const angleRad = (wisp.angle * Math.PI) / 180;
 
-        if (reducedMotion) {
-          const x = Math.cos((p.baseAngle * Math.PI) / 180) * p.orbitRadius;
-          const y = Math.sin((p.baseAngle * Math.PI) / 180) * p.orbitRadius;
-          return (
-            <div
-              key={p.index}
-              className="absolute rounded-full transition-colors duration-700"
-              style={{
-                width: p.size,
-                height: p.size,
-                background: `radial-gradient(circle, ${color} 0%, transparent 70%)`,
-                filter: `blur(${p.blur}px)`,
-                opacity: opacity * 0.5,
-                left: `calc(50% + ${x}px - ${p.size / 2}px)`,
-                top: `calc(50% + ${y}px - ${p.size / 2}px)`,
-              }}
-            />
-          );
-        }
+        // Position at ring edge
+        const startX = Math.cos(angleRad) * ringRadius;
+        const startY = Math.sin(angleRad) * ringRadius;
+
+        // Extend outward (or inward)
+        const direction = wisp.outward ? 1 : -0.6;
+        const endX = startX + Math.cos(angleRad) * wisp.length * direction;
+        const endY = startY + Math.sin(angleRad) * wisp.length * direction;
+
+        // Center point of wisp
+        const centerX = (startX + endX) / 2;
+        const centerY = (startY + endY) / 2;
 
         return (
           <div
-            key={p.index}
-            className="absolute left-1/2 top-1/2"
+            key={i}
+            className="absolute transition-colors duration-700"
             style={{
-              width: p.orbitRadius * 2,
-              height: p.orbitRadius * 2,
-              marginLeft: -p.orbitRadius,
-              marginTop: -p.orbitRadius,
-              animation: `orbit-${p.index % 2 === 0 ? 'cw' : 'ccw'} ${p.duration}s linear infinite`,
-              animationDelay: `${-p.index * 1.2}s`,
+              width: wisp.length,
+              height: wisp.width,
+              left: `calc(50% + ${centerX}px - ${wisp.length / 2}px)`,
+              top: `calc(50% + ${centerY}px - ${wisp.width / 2}px)`,
+              background: `radial-gradient(ellipse at ${wisp.outward ? '30%' : '70%'} 50%, ${color}60 0%, ${color}30 40%, transparent 80%)`,
+              filter: "blur(45px)",
+              transform: `rotate(${wisp.angle}deg)`,
+              opacity: 0.35,
+              animation: reducedMotion ? 'none' : `wisp-pulse 4s ease-in-out infinite`,
+              animationDelay: `${wisp.delay}s`,
             }}
-          >
-            <div
-              className="absolute rounded-full transition-colors duration-700"
-              style={{
-                width: p.size,
-                height: p.size,
-                background: `radial-gradient(circle, ${color} 0%, transparent 70%)`,
-                filter: `blur(${p.blur}px)`,
-                opacity,
-                left: `calc(50% + ${p.orbitRadius}px - ${p.size / 2}px)`,
-                top: `calc(50% - ${p.size / 2}px)`,
-              }}
-            />
-          </div>
+          />
         );
       })}
     </div>
@@ -176,7 +163,8 @@ function RingMist({ ringRadius, colorProgress, reducedMotion }: RingMistProps) {
 }
 
 // ============================================
-// Animated Ring Component (Scene 1-2)
+// Tubular Ring Component (Scene 1-2)
+// Multi-layer swirl with thick translucent tube
 // ============================================
 interface AnimatedRingProps {
   colorProgress: number; // 0 = iridescent, 1 = green
@@ -195,214 +183,257 @@ function AnimatedRing({
   greeting,
   reducedMotion,
 }: AnimatedRingProps) {
-  const ringSize = 420; // Large ring
-  const strokeWidth = 10; // Main stroke
-  const radius = (ringSize - strokeWidth * 2) / 2;
+  const ringSize = 420;
+  const tubeThickness = 45; // Thick tubular stroke
+  const radius = (ringSize - tubeThickness) / 2;
   const center = ringSize / 2;
-  const gradientId = "main-ring-gradient";
-  const contentPadding = 60; // Padding so text doesn't touch ring
+  const contentPadding = 70;
 
-  // Calculate interpolated colors based on progress
-  const getStrokeGradient = (opacity: number = 1) => {
-    if (colorProgress < 0.3) {
+  // Soft, muted color palette
+  const getSwirlGradient = (layer: 1 | 2 | 3, opacity: number = 1) => {
+    const greenTransition = colorProgress > 0.5;
+    const greenMix = Math.min(1, Math.max(0, (colorProgress - 0.3) / 0.4));
+
+    if (greenTransition && colorProgress > 0.7) {
+      // Full green state
       return (
         <>
-          <stop offset="0%" stopColor="hsl(175 65% 55%)" stopOpacity={0.9 * opacity} />
-          <stop offset="20%" stopColor="hsl(195 70% 55%)" stopOpacity={0.85 * opacity} />
-          <stop offset="40%" stopColor="hsl(230 60% 60%)" stopOpacity={0.8 * opacity} />
-          <stop offset="60%" stopColor="hsl(270 55% 58%)" stopOpacity={0.8 * opacity} />
-          <stop offset="80%" stopColor="hsl(310 50% 55%)" stopOpacity={0.85 * opacity} />
-          <stop offset="100%" stopColor="hsl(175 65% 55%)" stopOpacity={0.9 * opacity} />
+          <stop offset="0%" stopColor="hsl(148 45% 40%)" stopOpacity={0.7 * opacity} />
+          <stop offset="50%" stopColor="hsl(142 50% 42%)" stopOpacity={0.8 * opacity} />
+          <stop offset="100%" stopColor="hsl(148 45% 40%)" stopOpacity={0.7 * opacity} />
         </>
       );
-    } else if (colorProgress < 0.7) {
-      const greenMix = (colorProgress - 0.3) / 0.4;
+    }
+
+    // Each layer has offset colors for swirl effect
+    if (layer === 1) {
       return (
         <>
-          <stop offset="0%" stopColor={`hsl(${160 - greenMix * 20} ${65 + greenMix * 10}% ${52 - greenMix * 7}%)`} stopOpacity={0.9 * opacity} />
-          <stop offset="25%" stopColor={`hsl(${175 - greenMix * 35} ${68 + greenMix * 8}% ${53 - greenMix * 8}%)`} stopOpacity={0.85 * opacity} />
-          <stop offset="50%" stopColor={`hsl(${190 - greenMix * 50} ${65 + greenMix * 10}% ${52 - greenMix * 7}%)`} stopOpacity={0.85 * opacity} />
-          <stop offset="75%" stopColor={`hsl(${165 - greenMix * 25} ${67 + greenMix * 9}% ${50 - greenMix * 5}%)`} stopOpacity={0.85 * opacity} />
-          <stop offset="100%" stopColor={`hsl(${160 - greenMix * 20} ${65 + greenMix * 10}% ${52 - greenMix * 7}%)`} stopOpacity={0.9 * opacity} />
+          <stop offset="0%" stopColor={`hsl(${175 - greenMix * 30} ${42 + greenMix * 8}% ${48 - greenMix * 6}%)`} stopOpacity={0.65 * opacity} />
+          <stop offset="33%" stopColor={`hsl(${200 - greenMix * 55} ${38 + greenMix * 12}% ${52 - greenMix * 8}%)`} stopOpacity={0.6 * opacity} />
+          <stop offset="66%" stopColor={`hsl(${260 - greenMix * 115} ${30 + greenMix * 20}% ${52 - greenMix * 8}%)`} stopOpacity={0.55 * opacity} />
+          <stop offset="100%" stopColor={`hsl(${175 - greenMix * 30} ${42 + greenMix * 8}% ${48 - greenMix * 6}%)`} stopOpacity={0.65 * opacity} />
+        </>
+      );
+    } else if (layer === 2) {
+      return (
+        <>
+          <stop offset="0%" stopColor={`hsl(${195 - greenMix * 50} ${35 + greenMix * 15}% ${50 - greenMix * 7}%)`} stopOpacity={0.55 * opacity} />
+          <stop offset="33%" stopColor={`hsl(${220 - greenMix * 75} ${32 + greenMix * 18}% ${53 - greenMix * 9}%)`} stopOpacity={0.5 * opacity} />
+          <stop offset="66%" stopColor={`hsl(${175 - greenMix * 30} ${40 + greenMix * 10}% ${49 - greenMix * 6}%)`} stopOpacity={0.55 * opacity} />
+          <stop offset="100%" stopColor={`hsl(${195 - greenMix * 50} ${35 + greenMix * 15}% ${50 - greenMix * 7}%)`} stopOpacity={0.55 * opacity} />
         </>
       );
     } else {
       return (
         <>
-          <stop offset="0%" stopColor="hsl(145 72% 43%)" stopOpacity={0.9 * opacity} />
-          <stop offset="50%" stopColor="hsl(142 71% 45%)" stopOpacity={0.95 * opacity} />
-          <stop offset="100%" stopColor="hsl(145 72% 43%)" stopOpacity={0.9 * opacity} />
+          <stop offset="0%" stopColor={`hsl(${210 - greenMix * 65} ${33 + greenMix * 17}% ${52 - greenMix * 8}%)`} stopOpacity={0.5 * opacity} />
+          <stop offset="33%" stopColor={`hsl(${180 - greenMix * 35} ${38 + greenMix * 12}% ${50 - greenMix * 7}%)`} stopOpacity={0.45 * opacity} />
+          <stop offset="66%" stopColor={`hsl(${240 - greenMix * 95} ${28 + greenMix * 22}% ${50 - greenMix * 7}%)`} stopOpacity={0.5 * opacity} />
+          <stop offset="100%" stopColor={`hsl(${210 - greenMix * 65} ${33 + greenMix * 17}% ${52 - greenMix * 8}%)`} stopOpacity={0.5 * opacity} />
         </>
       );
     }
   };
 
-  // Glow color based on progress
+  // Glow color
   const glowColor = colorProgress > 0.7
-    ? "hsl(142 71% 45%)"
+    ? "hsl(145 45% 42%)"
     : colorProgress > 0.3
-      ? `hsl(${175 - colorProgress * 35} 65% 50%)`
-      : "hsl(195 70% 55%)";
+      ? `hsl(${180 - colorProgress * 40} 40% 48%)`
+      : "hsl(190 38% 50%)";
 
   return (
     <div
       className="relative flex items-center justify-center"
       style={{ width: ringSize + 200, height: ringSize + 200 }}
     >
-      {/* Ring orbiting mist */}
-      <RingMist
+      {/* Emanating wisps (smoke from ring) */}
+      <EmanatingWisps
         ringRadius={radius}
         colorProgress={colorProgress}
         reducedMotion={reducedMotion}
       />
 
-      {/* Outermost diffuse glow */}
+      {/* Outer ambient glow */}
       <motion.div
         className="absolute rounded-full"
         style={{
-          width: ringSize + 180,
-          height: ringSize + 180,
-          background: `radial-gradient(circle, ${glowColor}15 0%, ${glowColor}08 40%, transparent 70%)`,
-          filter: "blur(60px)",
+          width: ringSize + 160,
+          height: ringSize + 160,
+          background: `radial-gradient(circle, ${glowColor}20 0%, ${glowColor}08 50%, transparent 75%)`,
+          filter: "blur(50px)",
         }}
         animate={!reducedMotion ? {
-          scale: [1, 1.08, 1],
-          opacity: [0.5, 0.7, 0.5],
+          scale: [1, 1.06, 1],
+          opacity: [0.4, 0.6, 0.4],
         } : {}}
-        transition={{
-          duration: 5,
-          repeat: Infinity,
-          ease: "easeInOut",
+        transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+      />
+
+      {/* Inner luminosity (glow from center) */}
+      <div
+        className="absolute rounded-full"
+        style={{
+          width: radius * 1.6,
+          height: radius * 1.6,
+          background: `radial-gradient(circle, ${glowColor}12 0%, ${glowColor}06 40%, transparent 70%)`,
+          filter: "blur(30px)",
         }}
       />
 
-      {/* Ghost ring 1 - outer, very blurred */}
-      <svg
-        className="absolute"
-        width={ringSize + 80}
-        height={ringSize + 80}
-        viewBox={`0 0 ${ringSize + 80} ${ringSize + 80}`}
-        style={{ filter: "blur(40px)", opacity: 0.35 }}
-      >
-        <defs>
-          <linearGradient id={`${gradientId}-ghost1`} x1="0%" y1="100%" x2="100%" y2="0%">
-            {getStrokeGradient(0.6)}
-          </linearGradient>
-        </defs>
-        <circle
-          cx={(ringSize + 80) / 2}
-          cy={(ringSize + 80) / 2}
-          r={radius + 15}
-          fill="none"
-          stroke={`url(#${gradientId}-ghost1)`}
-          strokeWidth={strokeWidth * 3}
-        />
-      </svg>
+      {/* === TUBULAR RING STRUCTURE === */}
 
-      {/* Ghost ring 2 - medium blur */}
+      {/* Layer 1: Outer soft glow of tube */}
       <svg
         className="absolute"
         width={ringSize + 40}
         height={ringSize + 40}
         viewBox={`0 0 ${ringSize + 40} ${ringSize + 40}`}
-        style={{ filter: "blur(25px)", opacity: 0.45 }}
+        style={{ filter: "blur(20px)", opacity: 0.4 }}
       >
         <defs>
-          <linearGradient id={`${gradientId}-ghost2`} x1="100%" y1="0%" x2="0%" y2="100%">
-            {getStrokeGradient(0.7)}
+          <linearGradient id="tube-outer-glow" x1="0%" y1="0%" x2="100%" y2="100%">
+            {getSwirlGradient(1, 0.6)}
           </linearGradient>
         </defs>
         <circle
           cx={(ringSize + 40) / 2}
           cy={(ringSize + 40) / 2}
-          r={radius + 5}
-          fill="none"
-          stroke={`url(#${gradientId}-ghost2)`}
-          strokeWidth={strokeWidth * 2}
-        />
-      </svg>
-
-      {/* Ghost ring 3 - inner soft glow */}
-      <svg
-        className="absolute"
-        width={ringSize}
-        height={ringSize}
-        viewBox={`0 0 ${ringSize} ${ringSize}`}
-        style={{ filter: "blur(15px)", opacity: 0.5 }}
-      >
-        <defs>
-          <linearGradient id={`${gradientId}-ghost3`} x1="0%" y1="0%" x2="100%" y2="100%">
-            {getStrokeGradient(0.8)}
-          </linearGradient>
-        </defs>
-        <circle
-          cx={center}
-          cy={center}
           r={radius}
           fill="none"
-          stroke={`url(#${gradientId}-ghost3)`}
-          strokeWidth={strokeWidth * 1.5}
+          stroke="url(#tube-outer-glow)"
+          strokeWidth={tubeThickness + 20}
         />
       </svg>
 
-      {/* Main ring with subtle pulsating */}
-      <motion.svg
+      {/* Swirl Layer 1 - Slowest, clockwise */}
+      <div
         className="absolute"
-        width={ringSize}
-        height={ringSize}
-        viewBox={`0 0 ${ringSize} ${ringSize}`}
-        animate={!reducedMotion ? {
-          scale: [1, 1.015, 1],
-        } : {}}
-        transition={{
-          duration: 4,
-          repeat: Infinity,
-          ease: "easeInOut",
+        style={{
+          width: ringSize,
+          height: ringSize,
+          animation: reducedMotion ? 'none' : 'swirl-cw-slow 18s linear infinite',
         }}
       >
-        <defs>
-          <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
-            {getStrokeGradient()}
-          </linearGradient>
-          <filter id="ring-glow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="3" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-        <circle
-          cx={center}
-          cy={center}
-          r={radius}
-          fill="none"
-          stroke={`url(#${gradientId})`}
-          strokeWidth={strokeWidth}
-          strokeLinecap="round"
-          filter="url(#ring-glow)"
-        />
-      </motion.svg>
+        <svg width={ringSize} height={ringSize} viewBox={`0 0 ${ringSize} ${ringSize}`}>
+          <defs>
+            <linearGradient id="swirl-1" x1="0%" y1="0%" x2="100%" y2="100%">
+              {getSwirlGradient(1)}
+            </linearGradient>
+          </defs>
+          <circle
+            cx={center}
+            cy={center}
+            r={radius}
+            fill="none"
+            stroke="url(#swirl-1)"
+            strokeWidth={tubeThickness}
+            strokeLinecap="round"
+            opacity={0.45}
+          />
+        </svg>
+      </div>
 
-      {/* Inner highlight ring */}
+      {/* Swirl Layer 2 - Medium, counter-clockwise */}
+      <div
+        className="absolute"
+        style={{
+          width: ringSize,
+          height: ringSize,
+          animation: reducedMotion ? 'none' : 'swirl-ccw-med 24s linear infinite',
+        }}
+      >
+        <svg width={ringSize} height={ringSize} viewBox={`0 0 ${ringSize} ${ringSize}`}>
+          <defs>
+            <linearGradient id="swirl-2" x1="100%" y1="0%" x2="0%" y2="100%">
+              {getSwirlGradient(2)}
+            </linearGradient>
+          </defs>
+          <circle
+            cx={center}
+            cy={center}
+            r={radius}
+            fill="none"
+            stroke="url(#swirl-2)"
+            strokeWidth={tubeThickness - 5}
+            strokeLinecap="round"
+            opacity={0.4}
+          />
+        </svg>
+      </div>
+
+      {/* Swirl Layer 3 - Fastest, clockwise */}
+      <div
+        className="absolute"
+        style={{
+          width: ringSize,
+          height: ringSize,
+          animation: reducedMotion ? 'none' : 'swirl-cw-fast 30s linear infinite',
+        }}
+      >
+        <svg width={ringSize} height={ringSize} viewBox={`0 0 ${ringSize} ${ringSize}`}>
+          <defs>
+            <linearGradient id="swirl-3" x1="50%" y1="0%" x2="50%" y2="100%">
+              {getSwirlGradient(3)}
+            </linearGradient>
+          </defs>
+          <circle
+            cx={center}
+            cy={center}
+            r={radius}
+            fill="none"
+            stroke="url(#swirl-3)"
+            strokeWidth={tubeThickness - 10}
+            strokeLinecap="round"
+            opacity={0.35}
+          />
+        </svg>
+      </div>
+
+      {/* Tube highlight - outer edge */}
       <svg
         className="absolute"
         width={ringSize}
         height={ringSize}
         viewBox={`0 0 ${ringSize} ${ringSize}`}
-        style={{ opacity: 0.12 }}
+        style={{ opacity: 0.25 }}
       >
         <circle
           cx={center}
           cy={center}
-          r={radius - strokeWidth * 2}
+          r={radius + tubeThickness / 2 - 2}
           fill="none"
           stroke="white"
-          strokeWidth={0.5}
+          strokeWidth={1.5}
+          filter="url(#ring-highlight-blur)"
+        />
+        <defs>
+          <filter id="ring-highlight-blur">
+            <feGaussianBlur stdDeviation="1" />
+          </filter>
+        </defs>
+      </svg>
+
+      {/* Tube highlight - inner edge */}
+      <svg
+        className="absolute"
+        width={ringSize}
+        height={ringSize}
+        viewBox={`0 0 ${ringSize} ${ringSize}`}
+        style={{ opacity: 0.15 }}
+      >
+        <circle
+          cx={center}
+          cy={center}
+          r={radius - tubeThickness / 2 + 2}
+          fill="none"
+          stroke="white"
+          strokeWidth={1}
         />
       </svg>
 
-      {/* Content inside ring - with padding */}
+      {/* Content inside ring */}
       <div
         className="absolute flex flex-col items-center justify-center z-10"
         style={{
@@ -410,13 +441,10 @@ function AnimatedRing({
           height: (radius - contentPadding) * 2,
         }}
       >
-        {/* Greeting (fades out as score fades in) */}
+        {/* Greeting */}
         <motion.div
           className="text-center px-4"
-          animate={{
-            opacity: showScore ? 0 : 1,
-            y: showScore ? -10 : 0,
-          }}
+          animate={{ opacity: showScore ? 0 : 1, y: showScore ? -10 : 0 }}
           transition={{ duration: 0.5 }}
         >
           {greeting && (
@@ -426,13 +454,10 @@ function AnimatedRing({
           )}
         </motion.div>
 
-        {/* Score (fades in) */}
+        {/* Score */}
         <motion.div
           className="absolute inset-0 flex flex-col items-center justify-center text-center px-4"
-          animate={{
-            opacity: showScore ? 1 : 0,
-            y: showScore ? 0 : 10,
-          }}
+          animate={{ opacity: showScore ? 1 : 0, y: showScore ? 0 : 10 }}
           transition={{ duration: 0.5, delay: showScore ? 0.2 : 0 }}
         >
           {label && (
@@ -441,10 +466,7 @@ function AnimatedRing({
             </p>
           )}
           {score !== undefined && (
-            <p
-              className="text-5xl md:text-6xl lg:text-7xl font-light"
-              style={{ color: "hsl(142 71% 45%)" }}
-            >
+            <p className="text-5xl md:text-6xl lg:text-7xl font-light" style={{ color: "hsl(145 50% 45%)" }}>
               {score}
             </p>
           )}
