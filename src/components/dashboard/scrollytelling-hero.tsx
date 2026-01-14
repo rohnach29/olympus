@@ -7,7 +7,7 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 // Types
 // ============================================
 type Scene = 1 | 2 | 3 | 4 | 5 | 6;
-type BubbleColor = "neutral" | "green" | "orange" | "red";
+type RingColor = "neutral" | "green" | "orange" | "red";
 
 interface ScrollytellingHeroProps {
   userName: string;
@@ -22,13 +22,13 @@ interface ScrollytellingHeroProps {
 // ============================================
 // Utility functions
 // ============================================
-function getScoreColor(score: number): BubbleColor {
+function getScoreColor(score: number): RingColor {
   if (score >= 75) return "green";
   if (score >= 50) return "orange";
   return "red";
 }
 
-function getColorHSL(color: BubbleColor): string {
+function getColorHSL(color: RingColor): string {
   switch (color) {
     case "green":
       return "142 71% 45%";
@@ -42,11 +42,11 @@ function getColorHSL(color: BubbleColor): string {
 }
 
 // ============================================
-// Bubble Component
+// Ring Component (Ethereal hollow design)
 // ============================================
-interface BubbleProps {
+interface RingProps {
   size: "normal" | "large";
-  color: BubbleColor;
+  color: RingColor;
   isPremium?: boolean;
   isActive?: boolean;
   label?: string;
@@ -56,7 +56,7 @@ interface BubbleProps {
   reducedMotion: boolean;
 }
 
-function Bubble({
+function Ring({
   size,
   color,
   isPremium = false,
@@ -66,39 +66,50 @@ function Bubble({
   subtitle,
   className = "",
   reducedMotion,
-}: BubbleProps) {
-  const sizeClass = size === "large" ? "w-52 h-52 md:w-64 md:h-64" : "w-40 h-40 md:w-48 md:h-48";
+}: RingProps) {
+  const dimensions = size === "large"
+    ? { container: "w-52 h-52 md:w-64 md:h-64", svgSize: 256, strokeWidth: isPremium ? 8 : 6 }
+    : { container: "w-40 h-40 md:w-48 md:h-48", svgSize: 192, strokeWidth: 5 };
+
   const colorHSL = getColorHSL(color);
-  const glowOpacity = isActive ? (isPremium ? 0.5 : 0.35) : 0.15;
+  const radius = (dimensions.svgSize - dimensions.strokeWidth * 2) / 2;
+  const center = dimensions.svgSize / 2;
+
+  // Generate unique gradient ID
+  const gradientId = `ring-gradient-${color}-${size}-${Math.random().toString(36).slice(2, 9)}`;
+
+  // Iridescent gradient colors for neutral state
+  const getGradientStops = () => {
+    if (color === "neutral") {
+      return (
+        <>
+          <stop offset="0%" stopColor="hsl(180 70% 50%)" stopOpacity={0.9} />
+          <stop offset="25%" stopColor="hsl(200 80% 60%)" stopOpacity={0.85} />
+          <stop offset="50%" stopColor="hsl(260 70% 65%)" stopOpacity={0.8} />
+          <stop offset="75%" stopColor="hsl(300 60% 55%)" stopOpacity={0.75} />
+          <stop offset="100%" stopColor="hsl(180 70% 50%)" stopOpacity={0.9} />
+        </>
+      );
+    }
+    // Solid color with slight variation for depth
+    return (
+      <>
+        <stop offset="0%" stopColor={`hsl(${colorHSL})`} stopOpacity={0.95} />
+        <stop offset="50%" stopColor={`hsl(${colorHSL})`} stopOpacity={1} />
+        <stop offset="100%" stopColor={`hsl(${colorHSL})`} stopOpacity={0.95} />
+      </>
+    );
+  };
+
+  const glowIntensity = isActive ? (isPremium ? 1 : 0.7) : 0.3;
 
   return (
     <motion.div
-      className={`relative rounded-full flex flex-col items-center justify-center ${sizeClass} ${className}`}
-      style={{
-        background: isPremium
-          ? `
-            radial-gradient(ellipse at 25% 25%, hsl(0 0% 100% / 0.25) 0%, hsl(0 0% 100% / 0.08) 25%, transparent 60%),
-            radial-gradient(ellipse at 75% 75%, hsl(262 83% 58% / 0.15) 0%, transparent 50%),
-            radial-gradient(ellipse at 50% 50%, hsl(0 0% 10% / 0.95) 0%, hsl(0 0% 7% / 0.9) 100%)
-          `
-          : `
-            radial-gradient(ellipse at 30% 30%, hsl(0 0% 100% / 0.2) 0%, hsl(0 0% 100% / 0.05) 30%, transparent 70%),
-            radial-gradient(ellipse at 70% 80%, hsl(0 0% 100% / 0.1) 0%, transparent 50%),
-            radial-gradient(circle at 50% 50%, hsl(0 0% 10% / 0.9) 0%, hsl(0 0% 7% / 0.8) 100%)
-          `,
-        boxShadow: `
-          0 0 ${isPremium ? "60px" : "40px"} ${isPremium ? "20px" : "10px"} hsl(${colorHSL} / ${glowOpacity}),
-          0 0 ${isPremium ? "100px" : "80px"} ${isPremium ? "40px" : "20px"} hsl(${colorHSL} / ${glowOpacity * 0.5}),
-          inset 0 0 ${isPremium ? "30px" : "20px"} ${isPremium ? "10px" : "5px"} hsl(0 0% 100% / 0.1),
-          inset 0 -20px 40px -20px hsl(0 0% 0% / 0.3)
-        `,
-        border: `1px solid hsl(0 0% 100% / ${isPremium ? 0.2 : 0.15})`,
-      }}
+      className={`relative flex items-center justify-center ${dimensions.container} ${className}`}
       animate={
         !reducedMotion && isActive
           ? {
               scale: [1, 1.02, 1],
-              filter: ["brightness(1)", "brightness(1.05)", "brightness(1)"],
             }
           : {}
       }
@@ -112,7 +123,93 @@ function Bubble({
           : {}
       }
     >
-      {/* Inner content */}
+      {/* Outer glow layer (blurred duplicate) */}
+      <svg
+        className="absolute inset-0 w-full h-full"
+        viewBox={`0 0 ${dimensions.svgSize} ${dimensions.svgSize}`}
+        style={{
+          filter: `blur(${isPremium ? 20 : 15}px)`,
+          opacity: glowIntensity * 0.6,
+        }}
+      >
+        <defs>
+          <linearGradient id={`${gradientId}-glow`} x1="0%" y1="0%" x2="100%" y2="100%">
+            {getGradientStops()}
+          </linearGradient>
+        </defs>
+        <circle
+          cx={center}
+          cy={center}
+          r={radius}
+          fill="none"
+          stroke={`url(#${gradientId}-glow)`}
+          strokeWidth={dimensions.strokeWidth * 3}
+        />
+      </svg>
+
+      {/* Secondary glow layer */}
+      <svg
+        className="absolute inset-0 w-full h-full"
+        viewBox={`0 0 ${dimensions.svgSize} ${dimensions.svgSize}`}
+        style={{
+          filter: `blur(${isPremium ? 12 : 8}px)`,
+          opacity: glowIntensity * 0.8,
+        }}
+      >
+        <defs>
+          <linearGradient id={`${gradientId}-glow2`} x1="0%" y1="100%" x2="100%" y2="0%">
+            {getGradientStops()}
+          </linearGradient>
+        </defs>
+        <circle
+          cx={center}
+          cy={center}
+          r={radius}
+          fill="none"
+          stroke={`url(#${gradientId}-glow2)`}
+          strokeWidth={dimensions.strokeWidth * 2}
+        />
+      </svg>
+
+      {/* Main ring */}
+      <svg
+        className="absolute inset-0 w-full h-full"
+        viewBox={`0 0 ${dimensions.svgSize} ${dimensions.svgSize}`}
+      >
+        <defs>
+          <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
+            {getGradientStops()}
+          </linearGradient>
+        </defs>
+        <circle
+          cx={center}
+          cy={center}
+          r={radius}
+          fill="none"
+          stroke={`url(#${gradientId})`}
+          strokeWidth={dimensions.strokeWidth}
+          strokeLinecap="round"
+        />
+      </svg>
+
+      {/* Inner subtle ring for depth */}
+      <svg
+        className="absolute inset-0 w-full h-full"
+        viewBox={`0 0 ${dimensions.svgSize} ${dimensions.svgSize}`}
+        style={{ opacity: 0.3 }}
+      >
+        <circle
+          cx={center}
+          cy={center}
+          r={radius - dimensions.strokeWidth}
+          fill="none"
+          stroke="white"
+          strokeWidth={1}
+          opacity={0.2}
+        />
+      </svg>
+
+      {/* Content overlay */}
       <AnimatePresence mode="wait">
         {label && (
           <motion.div
@@ -121,7 +218,7 @@ function Bubble({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -5 }}
             transition={{ duration: reducedMotion ? 0.15 : 0.3 }}
-            className="text-center"
+            className="absolute inset-0 flex flex-col items-center justify-center text-center z-10"
           >
             <p className="text-xs md:text-sm text-white/70 uppercase tracking-wider mb-1">
               {label}
@@ -145,7 +242,7 @@ function Bubble({
 }
 
 // ============================================
-// Connector Component
+// Connector Component (Flowing energy wave)
 // ============================================
 interface ConnectorProps {
   isActive: boolean;
@@ -153,28 +250,104 @@ interface ConnectorProps {
 }
 
 function Connector({ isActive, reducedMotion }: ConnectorProps) {
+  const connectorId = `connector-${Math.random().toString(36).slice(2, 9)}`;
+
   return (
     <motion.div
-      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 md:w-32 h-0.5"
+      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 md:w-48 h-24"
       initial={{ opacity: 0 }}
       animate={{ opacity: isActive ? 1 : 0 }}
-      transition={{ duration: reducedMotion ? 0.15 : 0.5 }}
-      style={{
-        background: `linear-gradient(
-          90deg,
-          transparent 0%,
-          hsl(0 0% 100% / ${isActive ? 0.3 : 0.1}) 20%,
-          hsl(0 0% 100% / ${isActive ? 0.5 : 0.2}) 50%,
-          hsl(0 0% 100% / ${isActive ? 0.3 : 0.1}) 80%,
-          transparent 100%
-        )`,
-      }}
-    />
+      transition={{ duration: reducedMotion ? 0.15 : 0.8 }}
+    >
+      {/* Outer glow layer */}
+      <svg
+        className="absolute inset-0 w-full h-full"
+        viewBox="0 0 200 100"
+        preserveAspectRatio="none"
+        style={{
+          filter: "blur(12px)",
+          opacity: isActive ? 0.5 : 0.2,
+        }}
+      >
+        <defs>
+          <linearGradient id={`${connectorId}-glow`} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="hsl(180 70% 50%)" stopOpacity={0.8} />
+            <stop offset="50%" stopColor="hsl(200 80% 60%)" stopOpacity={0.9} />
+            <stop offset="100%" stopColor="hsl(160 70% 55%)" stopOpacity={0.8} />
+          </linearGradient>
+        </defs>
+        <path
+          d="M 0 50 Q 50 20, 100 50 Q 150 80, 200 50"
+          fill="none"
+          stroke={`url(#${connectorId}-glow)`}
+          strokeWidth={8}
+          strokeLinecap="round"
+        />
+      </svg>
+
+      {/* Secondary wave layer */}
+      <svg
+        className="absolute inset-0 w-full h-full"
+        viewBox="0 0 200 100"
+        preserveAspectRatio="none"
+        style={{
+          filter: "blur(6px)",
+          opacity: isActive ? 0.6 : 0.3,
+        }}
+      >
+        <defs>
+          <linearGradient id={`${connectorId}-wave2`} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="hsl(260 70% 65%)" stopOpacity={0.6} />
+            <stop offset="50%" stopColor="hsl(200 75% 55%)" stopOpacity={0.8} />
+            <stop offset="100%" stopColor="hsl(180 70% 50%)" stopOpacity={0.6} />
+          </linearGradient>
+        </defs>
+        <path
+          d="M 0 50 Q 50 70, 100 50 Q 150 30, 200 50"
+          fill="none"
+          stroke={`url(#${connectorId}-wave2)`}
+          strokeWidth={4}
+          strokeLinecap="round"
+        />
+      </svg>
+
+      {/* Main wave line */}
+      <svg
+        className="absolute inset-0 w-full h-full"
+        viewBox="0 0 200 100"
+        preserveAspectRatio="none"
+      >
+        <defs>
+          <linearGradient id={`${connectorId}-main`} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="hsl(180 70% 50%)" stopOpacity={0.9} />
+            <stop offset="30%" stopColor="hsl(200 80% 60%)" stopOpacity={1} />
+            <stop offset="70%" stopColor="hsl(200 80% 60%)" stopOpacity={1} />
+            <stop offset="100%" stopColor="hsl(160 70% 55%)" stopOpacity={0.9} />
+          </linearGradient>
+        </defs>
+        <motion.path
+          d="M 0 50 Q 50 30, 100 50 Q 150 70, 200 50"
+          fill="none"
+          stroke={`url(#${connectorId}-main)`}
+          strokeWidth={2}
+          strokeLinecap="round"
+          initial={{ pathLength: 0, opacity: 0 }}
+          animate={{
+            pathLength: isActive ? 1 : 0,
+            opacity: isActive ? 1 : 0,
+          }}
+          transition={{
+            duration: reducedMotion ? 0.2 : 1,
+            ease: "easeInOut",
+          }}
+        />
+      </svg>
+    </motion.div>
   );
 }
 
 // ============================================
-// Recommendation Card Component
+// Recommendation Card Component (Frosted glass)
 // ============================================
 interface RecommendationCardProps {
   title: string;
@@ -182,22 +355,75 @@ interface RecommendationCardProps {
 }
 
 function RecommendationCard({ title, body }: RecommendationCardProps) {
+  const cardId = `card-${Math.random().toString(36).slice(2, 9)}`;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: 0.3 }}
-      className="mt-8 px-6 py-4 rounded-2xl max-w-md mx-auto"
-      style={{
-        background: "hsl(0 0% 100% / 0.05)",
-        backdropFilter: "blur(10px)",
-        border: "1px solid hsl(0 0% 100% / 0.1)",
-      }}
+      className="mt-10 relative max-w-md mx-auto"
     >
-      <p className="text-xs text-white/50 uppercase tracking-wider mb-1">
-        {title}
-      </p>
-      <p className="text-white/90">{body}</p>
+      {/* Outer glow effect */}
+      <div
+        className="absolute -inset-1 rounded-3xl opacity-40"
+        style={{
+          background: `linear-gradient(135deg,
+            hsl(180 60% 50% / 0.3) 0%,
+            hsl(200 70% 55% / 0.2) 50%,
+            hsl(260 60% 60% / 0.3) 100%
+          )`,
+          filter: "blur(20px)",
+        }}
+      />
+
+      {/* Card border glow */}
+      <svg
+        className="absolute -inset-0.5 w-[calc(100%+4px)] h-[calc(100%+4px)]"
+        style={{ filter: "blur(8px)", opacity: 0.5 }}
+      >
+        <defs>
+          <linearGradient id={`${cardId}-border`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="hsl(180 70% 50%)" stopOpacity={0.6} />
+            <stop offset="50%" stopColor="hsl(200 80% 60%)" stopOpacity={0.4} />
+            <stop offset="100%" stopColor="hsl(260 70% 65%)" stopOpacity={0.6} />
+          </linearGradient>
+        </defs>
+        <rect
+          x="2"
+          y="2"
+          width="calc(100% - 4px)"
+          height="calc(100% - 4px)"
+          rx="24"
+          ry="24"
+          fill="none"
+          stroke={`url(#${cardId}-border)`}
+          strokeWidth="2"
+        />
+      </svg>
+
+      {/* Main card */}
+      <div
+        className="relative px-6 py-5 rounded-3xl"
+        style={{
+          background: `linear-gradient(135deg,
+            hsl(180 30% 20% / 0.15) 0%,
+            hsl(200 25% 15% / 0.2) 50%,
+            hsl(180 30% 18% / 0.15) 100%
+          )`,
+          backdropFilter: "blur(20px)",
+          border: "1px solid hsl(180 50% 60% / 0.15)",
+          boxShadow: `
+            inset 0 1px 0 0 hsl(180 50% 80% / 0.1),
+            inset 0 -1px 0 0 hsl(0 0% 0% / 0.2)
+          `,
+        }}
+      >
+        <p className="text-xs text-white/60 uppercase tracking-wider mb-2">
+          {title}
+        </p>
+        <p className="text-white/90 leading-relaxed">{body}</p>
+      </div>
     </motion.div>
   );
 }
@@ -244,7 +470,7 @@ function SceneStage({
             transition={{ duration: transitionDuration, ease: transitionEase }}
             className="flex flex-col items-center"
           >
-            <Bubble
+            <Ring
               size="normal"
               color="neutral"
               reducedMotion={reducedMotion}
@@ -270,7 +496,7 @@ function SceneStage({
             transition={{ duration: transitionDuration, ease: transitionEase }}
             className="flex flex-col items-center"
           >
-            <Bubble
+            <Ring
               size="normal"
               color={sleepColor}
               label="Sleep"
@@ -305,7 +531,7 @@ function SceneStage({
                 animate={{ x: 0 }}
                 transition={{ duration: transitionDuration, ease: transitionEase }}
               >
-                <Bubble
+                <Ring
                   size="normal"
                   color={sleepColor}
                   label="Sleep"
@@ -325,7 +551,7 @@ function SceneStage({
                   ease: transitionEase,
                 }}
               >
-                <Bubble
+                <Ring
                   size="normal"
                   color="neutral"
                   isActive={false}
@@ -347,7 +573,7 @@ function SceneStage({
             className="flex flex-col items-center"
           >
             <div className="relative flex items-center justify-center gap-16 md:gap-24">
-              <Bubble
+              <Ring
                 size="normal"
                 color={sleepColor}
                 label="Sleep"
@@ -358,7 +584,7 @@ function SceneStage({
 
               <Connector isActive={true} reducedMotion={reducedMotion} />
 
-              <Bubble
+              <Ring
                 size="normal"
                 color={recoveryColor}
                 label="Recovery"
@@ -387,7 +613,7 @@ function SceneStage({
                 ease: [0.34, 1.56, 0.64, 1],
               }}
             >
-              <Bubble
+              <Ring
                 size="large"
                 color={readinessColor}
                 isPremium
@@ -410,7 +636,7 @@ function SceneStage({
             transition={{ duration: transitionDuration, ease: transitionEase }}
             className="flex flex-col items-center"
           >
-            <Bubble
+            <Ring
               size="large"
               color={readinessColor}
               isPremium
