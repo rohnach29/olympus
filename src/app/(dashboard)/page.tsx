@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScoreRing } from "@/components/dashboard/score-ring";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { QuickActions } from "@/components/dashboard/quick-actions";
+import { ScrollytellingWrapper } from "@/components/dashboard/scrollytelling-wrapper";
 import {
   Heart,
   Footprints,
@@ -13,8 +14,17 @@ import {
 } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { db, healthMetrics, sleepSessions, workouts } from "@/lib/db";
-import { eq, desc, gte, and, sql } from "drizzle-orm";
+import { eq, gte, and, sql } from "drizzle-orm";
 import { getYesterdayDateString } from "@/lib/utils/timezone";
+
+// Hardcoded scrollytelling values (wire real data later)
+const scrollytellingData = {
+  userName: "Rohan",
+  sleepScore: 82,
+  recoveryScore: 82,
+  readinessScore: 78,
+  recommendationText: "Upper body strength — moderate intensity",
+};
 
 // Default values when no data available
 const defaultMetrics = {
@@ -197,11 +207,18 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Quick Actions */}
-      <section>
-        <QuickActions />
-      </section>
+    <ScrollytellingWrapper
+      userName={scrollytellingData.userName}
+      sleepScore={scrollytellingData.sleepScore}
+      recoveryScore={scrollytellingData.recoveryScore}
+      readinessScore={scrollytellingData.readinessScore}
+      recommendationText={scrollytellingData.recommendationText}
+    >
+      <div className="space-y-6">
+        {/* Quick Actions */}
+        <section>
+          <QuickActions />
+        </section>
 
       {/* Main Scores */}
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -345,5 +362,6 @@ export default async function DashboardPage() {
         </Card>
       </section>
     </div>
+    </ScrollytellingWrapper>
   );
 }

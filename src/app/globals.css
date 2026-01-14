@@ -189,3 +189,18 @@ body {
 .bg-score-moderate { background-color: hsl(var(--health-yellow)); }
 .bg-score-low { background-color: hsl(var(--health-orange)); }
 .bg-score-poor { background-color: hsl(var(--health-red)); }
+
+/* Scrollytelling Hero - hide scrollbar during experience */
+.scrolly-active {
+  overflow: hidden;
+}
+
+.scrolly-active .scrolly-container {
+  overflow-y: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrolly-active .scrolly-container::-webkit-scrollbar {
+  display: none;
+}
