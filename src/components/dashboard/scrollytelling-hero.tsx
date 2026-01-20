@@ -564,8 +564,8 @@ function ScrollReactiveRing({
       {/* WebGL Torus - fixed full-screen background */}
       <GlowingTorus />
 
-      {/* Text overlay - centered in ring */}
-      <div className="relative z-10 flex flex-col items-center justify-center">
+      {/* Text overlay - centered in ring, offset for sidebar */}
+      <div className="relative z-10 flex flex-col items-center justify-center ml-[200px]">
         {/* Greeting */}
         <motion.div
           className="text-center px-4"

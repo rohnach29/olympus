@@ -61,7 +61,7 @@ const fragmentShader = /* glsl */ `
 // ============================================
 function EtherealTorus() {
   return (
-    <mesh rotation={[0.3, 0, 0.1]}>
+    <mesh rotation={[0.3, 0, 0.1]} position={[1, 0, 0]}>
       <torusGeometry args={[2.8, 0.4, 64, 128]} />
       <shaderMaterial
         vertexShader={vertexShader}
