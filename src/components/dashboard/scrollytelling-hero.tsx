@@ -557,16 +557,53 @@ function ScrollReactiveRing({
     );
   }
 
+  // WebGL torus is now a fixed full-screen background
+  // Text overlays are handled here with HTML
   return (
-    <div className="relative w-[600px] h-[600px] flex items-center justify-center">
-      {/* WebGL Torus with integrated text */}
-      <GlowingTorus
-        colorProgress={progress}
-        greeting={greeting}
-        showScore={showScore}
-        score={sleepScore}
-      />
-    </div>
+    <>
+      {/* WebGL Torus - fixed full-screen background */}
+      <GlowingTorus />
+
+      {/* Text overlay - centered on screen */}
+      <div className="relative z-10 flex flex-col items-center justify-center">
+        {/* Greeting */}
+        <motion.div
+          className="text-center px-4"
+          animate={{ opacity: showScore ? 0 : 1, y: showScore ? -20 : 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <p
+            className="text-2xl md:text-3xl lg:text-4xl font-light text-white/90 leading-tight"
+            style={{
+              textShadow: "0 0 40px rgba(0, 255, 255, 0.4)",
+            }}
+          >
+            {greeting}
+          </p>
+        </motion.div>
+
+        {/* Score - absolutely positioned to overlap greeting space */}
+        <motion.div
+          className="absolute inset-0 flex flex-col items-center justify-center text-center px-4"
+          animate={{ opacity: showScore ? 1 : 0, y: showScore ? 0 : 20 }}
+          transition={{ duration: 0.5, delay: showScore ? 0.2 : 0 }}
+        >
+          <p className="text-xs md:text-sm text-white/60 uppercase tracking-widest mb-2">
+            Sleep
+          </p>
+          <p
+            className="text-6xl md:text-7xl lg:text-8xl font-light"
+            style={{
+              color: "#00FF88",
+              textShadow: "0 0 60px rgba(0, 255, 136, 0.5)",
+            }}
+          >
+            {sleepScore}
+          </p>
+          <p className="text-xs text-white/50 mt-2">Last night</p>
+        </motion.div>
+      </div>
+    </>
   );
 }
 
