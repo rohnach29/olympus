@@ -1,88 +1,121 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useMemo } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Html, MeshTransmissionMaterial } from "@react-three/drei";
+import { Html, Float } from "@react-three/drei";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import * as THREE from "three";
 
 // ============================================
-// Ethereal Torus with Transmission Material
+// Vertex Shader
 // ============================================
-interface EtherealTorusProps {
+const vertexShader = /* glsl */ `
+  varying vec2 vUv;
+  varying vec3 vNormal;
+  varying vec3 vViewPosition;
+
+  void main() {
+    vUv = uv;
+    vNormal = normalize(normalMatrix * normal);
+
+    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    vViewPosition = -mvPosition.xyz;
+
+    gl_Position = projectionMatrix * mvPosition;
+  }
+`;
+
+// ============================================
+// Fragment Shader - Holographic Ghostly Ring
+// ============================================
+const fragmentShader = /* glsl */ `
+  uniform float uTime;
+  uniform float uColorProgress;
+
+  varying vec2 vUv;
+  varying vec3 vNormal;
+  varying vec3 vViewPosition;
+
+  void main() {
+    // Calculate view direction
+    vec3 viewDirection = normalize(vViewPosition);
+
+    // Fresnel effect: dot product of view and normal
+    float fresnel = dot(viewDirection, vNormal);
+
+    // Invert so edges are bright, center is transparent
+    float glow = pow(1.0 - fresnel, 3.0);
+
+    // Color gradient: Cyan to Purple based on UV + slow time
+    vec3 cyan = vec3(0.0, 1.0, 1.0);
+    vec3 purple = vec3(0.6, 0.2, 1.0);
+    vec3 lime = vec3(0.2, 1.0, 0.4);
+
+    // Animate color position
+    float colorPos = vUv.x + uTime * 0.1;
+    colorPos = fract(colorPos); // Keep in 0-1 range
+
+    // Mix colors based on progress
+    vec3 color;
+    if (uColorProgress < 0.5) {
+      // Cyan to Purple gradient
+      color = mix(cyan, purple, colorPos);
+    } else {
+      // Transition to green
+      float greenMix = (uColorProgress - 0.5) * 2.0;
+      vec3 baseColor = mix(cyan, purple, colorPos);
+      color = mix(baseColor, lime, greenMix);
+    }
+
+    // Boost color intensity for bloom
+    color *= 1.5;
+
+    // Use glow as alpha - edges visible, center transparent
+    gl_FragColor = vec4(color, glow);
+  }
+`;
+
+// ============================================
+// Holographic Torus
+// ============================================
+interface HolographicTorusProps {
   colorProgress: number;
 }
 
-function EtherealTorus({ colorProgress }: EtherealTorusProps) {
+function HolographicTorus({ colorProgress }: HolographicTorusProps) {
   const meshRef = useRef<THREE.Mesh>(null);
-  const innerMeshRef = useRef<THREE.Mesh>(null);
 
-  // Animate rotation
+  // Create shader material
+  const material = useMemo(() => {
+    return new THREE.ShaderMaterial({
+      vertexShader,
+      fragmentShader,
+      uniforms: {
+        uTime: { value: 0 },
+        uColorProgress: { value: 0 },
+      },
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+  }, []);
+
+  // Animate
   useFrame((state) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.z = state.clock.elapsedTime * 0.02;
-      meshRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 0.1) * 0.05;
-    }
-    if (innerMeshRef.current) {
-      innerMeshRef.current.rotation.z = -state.clock.elapsedTime * 0.03;
-    }
+    material.uniforms.uTime.value = state.clock.elapsedTime;
+    material.uniforms.uColorProgress.value = colorProgress;
   });
 
-  // Color interpolation
-  const baseColor = colorProgress > 0.5
-    ? new THREE.Color("#00ff88")
-    : new THREE.Color("#00ffff");
-
-  const accentColor = colorProgress > 0.5
-    ? new THREE.Color("#40ffa0")
-    : new THREE.Color("#8a2be2");
-
   return (
-    <group>
-      {/* Main torus with transmission material for glass effect */}
-      <mesh ref={meshRef}>
-        <torusGeometry args={[1.6, 0.35, 64, 128]} />
-        <MeshTransmissionMaterial
-          backside
-          samples={16}
-          thickness={0.5}
-          chromaticAberration={0.2}
-          anisotropy={0.3}
-          distortion={0.5}
-          distortionScale={0.5}
-          temporalDistortion={0.1}
-          iridescence={1}
-          iridescenceIOR={1}
-          iridescenceThicknessRange={[0, 1400]}
-          color={baseColor}
-          transmission={0.95}
-          roughness={0.1}
-          ior={1.5}
-        />
+    <Float
+      speed={2}
+      rotationIntensity={0.2}
+      floatIntensity={0.3}
+    >
+      <mesh ref={meshRef} material={material}>
+        <torusGeometry args={[1.8, 0.4, 64, 128]} />
       </mesh>
-
-      {/* Inner glow ring */}
-      <mesh ref={innerMeshRef}>
-        <torusGeometry args={[1.6, 0.2, 32, 64]} />
-        <meshBasicMaterial
-          color={accentColor}
-          transparent
-          opacity={0.4}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-
-      {/* Outer glow halo */}
-      <mesh>
-        <torusGeometry args={[1.6, 0.5, 32, 64]} />
-        <meshBasicMaterial
-          color={baseColor}
-          transparent
-          opacity={0.15}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-    </group>
+    </Float>
   );
 }
 
@@ -112,7 +145,7 @@ function TextOverlay({ greeting, showScore, score }: TextOverlayProps) {
             style={{
               fontSize: "1.5rem",
               opacity: 0.95,
-              textShadow: "0 0 30px rgba(0, 255, 255, 0.4)",
+              textShadow: "0 0 30px rgba(0, 255, 255, 0.5)",
             }}
           >
             {greeting}
@@ -149,7 +182,7 @@ function TextOverlay({ greeting, showScore, score }: TextOverlayProps) {
 }
 
 // ============================================
-// Scene
+// Scene - No lights needed, color from shader math
 // ============================================
 interface SceneProps {
   colorProgress: number;
@@ -161,14 +194,14 @@ interface SceneProps {
 function Scene({ colorProgress, greeting, showScore, score }: SceneProps) {
   return (
     <>
-      <EtherealTorus colorProgress={colorProgress} />
+      <HolographicTorus colorProgress={colorProgress} />
       <TextOverlay greeting={greeting} showScore={showScore} score={score} />
 
-      {/* Bloom post-processing */}
+      {/* Bloom with high intensity and zero threshold */}
       <EffectComposer>
         <Bloom
-          intensity={1.2}
-          luminanceThreshold={0.2}
+          intensity={2.0}
+          luminanceThreshold={0}
           luminanceSmoothing={0.9}
           mipmapBlur
         />
@@ -204,15 +237,11 @@ export function GlowingTorus({
           alpha: false,
           powerPreference: "high-performance",
         }}
-        style={{ background: "#050508" }}
+        style={{ background: "#030305" }}
       >
-        <color attach="background" args={["#050508"]} />
+        <color attach="background" args={["#030305"]} />
 
-        {/* Lighting */}
-        <ambientLight intensity={0.3} />
-        <pointLight position={[5, 5, 5]} intensity={1} color="#00ffff" />
-        <pointLight position={[-5, -5, 5]} intensity={0.5} color="#8a2be2" />
-        <pointLight position={[0, 0, 3]} intensity={0.3} color="#00ff88" />
+        {/* No lights - color comes from shader math */}
 
         <Scene
           colorProgress={colorProgress}
