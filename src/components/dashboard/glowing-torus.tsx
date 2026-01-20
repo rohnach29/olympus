@@ -94,7 +94,6 @@ function EtherealTorus() {
       transparent: true,
       side: THREE.DoubleSide,
       depthWrite: false,
-      blending: THREE.AdditiveBlending, // Additive for glowing/emissive look
     });
   }, []);
 
