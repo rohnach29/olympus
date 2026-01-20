@@ -57,11 +57,11 @@ const fragmentShader = /* glsl */ `
 `;
 
 // ============================================
-// Ethereal Torus Component
+// Ethereal Torus Component - Shifted right to account for sidebar
 // ============================================
 function EtherealTorus() {
   return (
-    <mesh rotation={[0.3, 0, 0.1]}>
+    <mesh rotation={[0.3, 0, 0.1]} position={[1.2, 0, 0]}>
       <torusGeometry args={[2.8, 0.4, 64, 128]} />
       <shaderMaterial
         vertexShader={vertexShader}
@@ -77,6 +77,34 @@ function EtherealTorus() {
 }
 
 // ============================================
+// Ambient Color Splotches - Soft glowing orbs in background
+// ============================================
+function ColorSplotches() {
+  const splotches = [
+    { position: [-4, 3, -5], color: [0.4, 0.1, 0.6], scale: 2.5 },    // Purple top-left
+    { position: [5, -2, -6], color: [0.1, 0.5, 0.6], scale: 3 },      // Teal bottom-right
+    { position: [-3, -3, -4], color: [0.2, 0.3, 0.7], scale: 2 },     // Blue bottom-left
+    { position: [4, 3, -5], color: [0.5, 0.2, 0.5], scale: 2.2 },     // Magenta top-right
+    { position: [0, -4, -7], color: [0.1, 0.4, 0.5], scale: 3.5 },    // Cyan bottom-center
+  ];
+
+  return (
+    <>
+      {splotches.map((splotch, i) => (
+        <mesh key={i} position={splotch.position as [number, number, number]}>
+          <sphereGeometry args={[splotch.scale, 32, 32]} />
+          <meshBasicMaterial
+            color={splotch.color as [number, number, number]}
+            transparent
+            opacity={0.15}
+          />
+        </mesh>
+      ))}
+    </>
+  );
+}
+
+// ============================================
 // Scene
 // ============================================
 function Scene() {
@@ -84,12 +112,13 @@ function Scene() {
     <>
       <color attach="background" args={["#0a0b0f"]} />
       <PerspectiveCamera makeDefault position={[0, 0, 10]} fov={50} />
+      <ColorSplotches />
       <EtherealTorus />
       <EffectComposer>
         <Bloom
-          luminanceThreshold={0.2}
+          luminanceThreshold={0.1}
           luminanceSmoothing={0.9}
-          intensity={0.8}
+          intensity={1.0}
           mipmapBlur
         />
       </EffectComposer>

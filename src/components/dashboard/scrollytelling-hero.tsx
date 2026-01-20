@@ -564,8 +564,8 @@ function ScrollReactiveRing({
       {/* WebGL Torus - fixed full-screen background */}
       <GlowingTorus />
 
-      {/* Text overlay - centered on screen */}
-      <div className="relative z-10 flex flex-col items-center justify-center">
+      {/* Text overlay - shifted right to align with ring */}
+      <div className="relative z-10 flex flex-col items-center justify-center ml-[100px]">
         {/* Greeting */}
         <motion.div
           className="text-center px-4"
@@ -573,9 +573,10 @@ function ScrollReactiveRing({
           transition={{ duration: 0.5 }}
         >
           <p
-            className="text-2xl md:text-3xl lg:text-4xl font-light text-white/90 leading-tight"
+            className="text-3xl md:text-4xl lg:text-5xl font-extralight tracking-wide text-white/95 leading-tight"
             style={{
-              textShadow: "0 0 40px rgba(0, 255, 255, 0.4)",
+              textShadow: "0 0 60px rgba(140, 100, 200, 0.5), 0 0 120px rgba(80, 180, 180, 0.3)",
+              letterSpacing: "0.05em",
             }}
           >
             {greeting}
@@ -588,19 +589,19 @@ function ScrollReactiveRing({
           animate={{ opacity: showScore ? 1 : 0, y: showScore ? 0 : 20 }}
           transition={{ duration: 0.5, delay: showScore ? 0.2 : 0 }}
         >
-          <p className="text-xs md:text-sm text-white/60 uppercase tracking-widest mb-2">
+          <p className="text-xs md:text-sm text-white/50 uppercase tracking-[0.3em] mb-3 font-light">
             Sleep
           </p>
           <p
-            className="text-6xl md:text-7xl lg:text-8xl font-light"
+            className="text-6xl md:text-7xl lg:text-8xl font-extralight tracking-tight"
             style={{
               color: "#00FF88",
-              textShadow: "0 0 60px rgba(0, 255, 136, 0.5)",
+              textShadow: "0 0 60px rgba(0, 255, 136, 0.5), 0 0 120px rgba(0, 255, 136, 0.2)",
             }}
           >
             {sleepScore}
           </p>
-          <p className="text-xs text-white/50 mt-2">Last night</p>
+          <p className="text-xs text-white/40 mt-3 tracking-wider font-light">Last night</p>
         </motion.div>
       </div>
     </>
