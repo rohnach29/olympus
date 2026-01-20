@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Canvas } from "@react-three/fiber";
 import { PerspectiveCamera } from "@react-three/drei";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
@@ -130,9 +130,20 @@ function Scene() {
 }
 
 // ============================================
-// Main Component
+// Main Component - Client-side only to prevent hydration mismatch
 // ============================================
 export function GlowingTorus() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Prevent SSR hydration mismatch
+  if (!mounted) {
+    return <div className="fixed inset-0 w-full h-full -z-10 pointer-events-none bg-[#0a0b0f]" />;
+  }
+
   return (
     <div className="fixed inset-0 w-full h-full -z-10 pointer-events-none">
       <Canvas
