@@ -50,12 +50,12 @@ const fragmentShader = /* glsl */ `
     float angle = atan(vWorldPosition.y, vWorldPosition.x);
     float t = (angle + 3.14159) / (2.0 * 3.14159);
 
-    // Luminous, emissive color palette - brighter for internal glow effect
+    // Luminous, emissive color palette - bright enough for additive blending
     // These are "neon gas" / "bioluminescent" colors
-    vec3 colorPurple = vec3(0.5, 0.2, 0.7);    // Glowing violet
-    vec3 colorTeal   = vec3(0.2, 0.6, 0.6);    // Luminous teal
-    vec3 colorGreen  = vec3(0.2, 0.5, 0.4);    // Ethereal mint
-    vec3 colorBlue   = vec3(0.2, 0.35, 0.6);   // Soft azure
+    vec3 colorPurple = vec3(0.6, 0.3, 0.9);    // Glowing violet
+    vec3 colorTeal   = vec3(0.3, 0.8, 0.8);    // Luminous teal
+    vec3 colorGreen  = vec3(0.3, 0.7, 0.5);    // Ethereal mint
+    vec3 colorBlue   = vec3(0.3, 0.5, 0.8);    // Soft azure
 
     // Smooth gradient around the ring
     vec3 color;
@@ -71,14 +71,13 @@ const fragmentShader = /* glsl */ `
 
     // Boost color intensity for emissive/luminous appearance
     // This makes the light appear to come FROM the surface
-    color *= 1.3;
+    color *= 1.5;
 
     // Combine main glow with outer atmospheric glow
     float totalGlow = glow + outerGlow;
 
-    // Soft alpha - spectral transparency
-    // Lower base opacity makes it feel less solid
-    float alpha = totalGlow * 0.7;
+    // Alpha needs to be visible with additive blending
+    float alpha = totalGlow * 1.0;
 
     gl_FragColor = vec4(color, alpha);
   }
