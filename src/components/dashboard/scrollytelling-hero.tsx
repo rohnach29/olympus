@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useCallback, useMemo, useState, useEffect } from "react";
+import { useRef, useCallback, useMemo, useState } from "react";
 import {
   motion,
   useScroll,
@@ -10,6 +10,13 @@ import {
   useMotionValueEvent,
   MotionValue,
 } from "framer-motion";
+import dynamic from "next/dynamic";
+
+// Dynamically import WebGL component to avoid SSR issues
+const GlowingTorus = dynamic(
+  () => import("./glowing-torus").then((mod) => mod.GlowingTorus),
+  { ssr: false }
+);
 
 // ============================================
 // Types
@@ -513,7 +520,7 @@ function DynamicBackground({ colorProgress, reducedMotion }: DynamicBackgroundPr
 }
 
 // ============================================
-// Scroll-Reactive Ring Wrapper
+// Scroll-Reactive Ring Wrapper (WebGL Torus)
 // ============================================
 interface ScrollReactiveRingProps {
   colorProgress: MotionValue<number>;
@@ -536,15 +543,61 @@ function ScrollReactiveRing({
     setShowScore(latest > 0.6);
   });
 
+  // Use CSS fallback for reduced motion, WebGL otherwise
+  if (reducedMotion) {
+    return (
+      <AnimatedRing
+        colorProgress={progress}
+        showScore={showScore}
+        score={sleepScore}
+        label="Sleep"
+        greeting={greeting}
+        reducedMotion={reducedMotion}
+      />
+    );
+  }
+
   return (
-    <AnimatedRing
-      colorProgress={progress}
-      showScore={showScore}
-      score={sleepScore}
-      label="Sleep"
-      greeting={greeting}
-      reducedMotion={reducedMotion}
-    />
+    <div className="relative w-[500px] h-[500px] flex items-center justify-center">
+      {/* WebGL Torus */}
+      <div className="absolute inset-0">
+        <GlowingTorus colorProgress={progress} />
+      </div>
+
+      {/* Text Overlay */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none">
+        {/* Greeting (fades out as score fades in) */}
+        <motion.div
+          className="text-center px-8"
+          animate={{ opacity: showScore ? 0 : 1, y: showScore ? -10 : 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          {greeting && (
+            <p className="text-xl md:text-2xl lg:text-3xl font-light text-white/90 leading-tight drop-shadow-lg">
+              {greeting}
+            </p>
+          )}
+        </motion.div>
+
+        {/* Score (fades in) */}
+        <motion.div
+          className="absolute inset-0 flex flex-col items-center justify-center text-center px-8"
+          animate={{ opacity: showScore ? 1 : 0, y: showScore ? 0 : 10 }}
+          transition={{ duration: 0.5, delay: showScore ? 0.2 : 0 }}
+        >
+          <p className="text-xs md:text-sm text-white/70 uppercase tracking-wider mb-1">
+            Sleep
+          </p>
+          <p
+            className="text-5xl md:text-6xl lg:text-7xl font-light drop-shadow-lg"
+            style={{ color: "hsl(145 70% 55%)" }}
+          >
+            {sleepScore}
+          </p>
+          <p className="text-xs text-white/50 mt-1">Last night</p>
+        </motion.div>
+      </div>
+    </div>
   );
 }
 
