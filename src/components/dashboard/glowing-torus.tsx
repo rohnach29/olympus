@@ -87,19 +87,11 @@ const fragmentShader = /* glsl */ `
 // Ethereal Torus - Gaseous Halo
 // ============================================
 function EtherealTorus() {
-  const material = useMemo(() => {
-    return new THREE.ShaderMaterial({
-      vertexShader,
-      fragmentShader,
-      transparent: true,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
-  }, []);
-
+  // DEBUG: Using basic material to test if geometry renders
   return (
-    <mesh material={material} rotation={[0.3, 0, 0.1]}>
+    <mesh rotation={[0.3, 0, 0.1]}>
       <torusGeometry args={[2.8, 0.4, 64, 128]} />
+      <meshBasicMaterial color="#ff00ff" />
     </mesh>
   );
 }
