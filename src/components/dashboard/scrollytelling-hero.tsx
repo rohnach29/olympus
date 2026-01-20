@@ -564,8 +564,8 @@ function ScrollReactiveRing({
       {/* WebGL Torus - fixed full-screen background */}
       <GlowingTorus />
 
-      {/* Text overlay - centered in ring, offset for sidebar */}
-      <div className="relative z-10 flex flex-col items-center justify-center ml-[200px]">
+      {/* Text overlay - fixed position to match ring center exactly */}
+      <div className="fixed inset-0 z-10 flex items-center justify-center pl-[10vw]">
         {/* Greeting */}
         <motion.div
           className="text-center px-4"
@@ -585,7 +585,7 @@ function ScrollReactiveRing({
 
         {/* Score - absolutely positioned to overlap greeting space */}
         <motion.div
-          className="absolute inset-0 flex flex-col items-center justify-center text-center px-4"
+          className="absolute inset-0 flex flex-col items-center justify-center text-center px-4 pl-[10vw]"
           animate={{ opacity: showScore ? 1 : 0, y: showScore ? 0 : 20 }}
           transition={{ duration: 0.5, delay: showScore ? 0.2 : 0 }}
         >
