@@ -1,119 +1,95 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Canvas } from "@react-three/fiber";
 import { PerspectiveCamera } from "@react-three/drei";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
-import * as THREE from "three";
 
 // ============================================
-// Vertex Shader - Passes world position for angular color mapping
+// Vertex Shader
 // ============================================
 const vertexShader = /* glsl */ `
   varying vec3 vNormal;
   varying vec3 vPosition;
-  varying vec2 vUv;
   varying vec3 vWorldPosition;
 
   void main() {
-    vUv = uv;
     vNormal = normalize(normalMatrix * normal);
-    vPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+    vPosition = position;
     vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
 
 // ============================================
-// Fragment Shader - Ethereal Gaseous Halo
-// Spectral: transparent center, glowing edges
-// Emissive: light emanates from within, not reflected
+// Fragment Shader - Ethereal Glow
 // ============================================
 const fragmentShader = /* glsl */ `
   varying vec3 vNormal;
   varying vec3 vPosition;
-  varying vec2 vUv;
   varying vec3 vWorldPosition;
 
   void main() {
-    vec3 viewDirection = normalize(cameraPosition - vPosition);
-    float fresnel = dot(viewDirection, vNormal);
+    // Fresnel for edge glow
+    vec3 viewDir = normalize(cameraPosition - vWorldPosition);
+    float fresnel = 1.0 - abs(dot(viewDir, vNormal));
+    float glow = pow(fresnel, 2.5);
 
-    // Very soft, gaseous falloff - low power for gradual transition
-    // This creates the "could put my hand through it" feel
-    float glow = pow(1.0 - fresnel, 2.0);
-
-    // Add a secondary softer outer glow layer for misty atmosphere
-    float outerGlow = pow(1.0 - fresnel, 1.2) * 0.4;
-
-    // Calculate angle around the torus center
+    // Angle around the ring for color gradient
     float angle = atan(vWorldPosition.y, vWorldPosition.x);
-    float t = (angle + 3.14159) / (2.0 * 3.14159);
+    float t = (angle + 3.14159) / 6.28318; // 0 to 1
 
-    // Luminous, emissive color palette - bright enough for additive blending
-    // These are "neon gas" / "bioluminescent" colors
-    vec3 colorPurple = vec3(0.6, 0.3, 0.9);    // Glowing violet
-    vec3 colorTeal   = vec3(0.3, 0.8, 0.8);    // Luminous teal
-    vec3 colorGreen  = vec3(0.3, 0.7, 0.5);    // Ethereal mint
-    vec3 colorBlue   = vec3(0.3, 0.5, 0.8);    // Soft azure
+    // Color stops - ethereal palette
+    vec3 purple = vec3(0.6, 0.2, 0.8);
+    vec3 teal = vec3(0.2, 0.7, 0.7);
+    vec3 green = vec3(0.2, 0.6, 0.4);
+    vec3 blue = vec3(0.3, 0.4, 0.7);
 
-    // Smooth gradient around the ring
-    vec3 color;
-    if (t < 0.25) {
-      color = mix(colorPurple, colorTeal, smoothstep(0.0, 0.25, t));
-    } else if (t < 0.5) {
-      color = mix(colorTeal, colorGreen, smoothstep(0.25, 0.5, t));
-    } else if (t < 0.75) {
-      color = mix(colorGreen, colorBlue, smoothstep(0.5, 0.75, t));
-    } else {
-      color = mix(colorBlue, colorPurple, smoothstep(0.75, 1.0, t));
-    }
+    // Smooth 4-stop gradient using mix
+    vec3 color1 = mix(purple, teal, smoothstep(0.0, 0.25, t));
+    vec3 color2 = mix(color1, green, smoothstep(0.25, 0.5, t));
+    vec3 color3 = mix(color2, blue, smoothstep(0.5, 0.75, t));
+    vec3 finalColor = mix(color3, purple, smoothstep(0.75, 1.0, t));
 
-    // Boost color intensity for emissive/luminous appearance
-    // This makes the light appear to come FROM the surface
-    color *= 1.5;
+    // Brighten for glow effect
+    finalColor *= 1.4;
 
-    // Combine main glow with outer atmospheric glow
-    float totalGlow = glow + outerGlow;
-
-    // Alpha needs to be visible with additive blending
-    float alpha = totalGlow * 1.0;
-
-    gl_FragColor = vec4(color, alpha);
+    // Output with glow-based alpha
+    gl_FragColor = vec4(finalColor, glow);
   }
 `;
 
 // ============================================
-// Ethereal Torus - Gaseous Halo
+// Ethereal Torus Component
 // ============================================
 function EtherealTorus() {
-  // DEBUG: Using basic material to test if geometry renders
   return (
     <mesh rotation={[0.3, 0, 0.1]}>
       <torusGeometry args={[2.8, 0.4, 64, 128]} />
-      <meshBasicMaterial color="#ff00ff" />
+      <shaderMaterial
+        vertexShader={vertexShader}
+        fragmentShader={fragmentShader}
+        transparent={true}
+        depthWrite={false}
+      />
     </mesh>
   );
 }
 
 // ============================================
-// Scene - Ethereal atmosphere with heavy bloom
+// Scene
 // ============================================
 function Scene() {
   return (
     <>
-      {/* Dark background */}
       <color attach="background" args={["#0a0b0f"]} />
-
       <PerspectiveCamera makeDefault position={[0, 0, 10]} fov={50} />
       <EtherealTorus />
-
       <EffectComposer>
-        {/* Heavy bloom for soft, misty glow bleeding into background */}
         <Bloom
-          luminanceThreshold={0.1}   // Lower = more glow triggers
+          luminanceThreshold={0.2}
           luminanceSmoothing={0.9}
-          intensity={1.2}            // Higher = softer, more atmospheric
+          intensity={0.8}
           mipmapBlur
         />
       </EffectComposer>
@@ -122,7 +98,7 @@ function Scene() {
 }
 
 // ============================================
-// Main Component - Client-side only to prevent hydration mismatch
+// Main Component
 // ============================================
 export function GlowingTorus() {
   const [mounted, setMounted] = useState(false);
@@ -131,7 +107,6 @@ export function GlowingTorus() {
     setMounted(true);
   }, []);
 
-  // Prevent SSR hydration mismatch
   if (!mounted) {
     return <div className="fixed inset-0 w-full h-full -z-10 pointer-events-none bg-[#0a0b0f]" />;
   }
