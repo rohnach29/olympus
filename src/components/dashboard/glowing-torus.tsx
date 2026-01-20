@@ -10,22 +10,49 @@ import { EffectComposer, Bloom } from "@react-three/postprocessing";
 // ============================================
 const vertexShader = /* glsl */ `
   varying vec3 vNormal;
+  varying vec3 vWorldPosition;
 
   void main() {
     vNormal = normalize(normalMatrix * normal);
+    vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
 
 // ============================================
-// Fragment Shader - Simple test
+// Fragment Shader - Ethereal Glow with Color Gradient
 // ============================================
 const fragmentShader = /* glsl */ `
+  uniform vec3 uCameraPosition;
   varying vec3 vNormal;
+  varying vec3 vWorldPosition;
 
   void main() {
-    // Just output a solid bright color
-    gl_FragColor = vec4(0.5, 0.2, 0.8, 1.0);
+    // Fresnel for soft edge glow
+    vec3 viewDir = normalize(uCameraPosition - vWorldPosition);
+    float fresnel = 1.0 - abs(dot(viewDir, vNormal));
+    float glow = pow(fresnel, 2.0);
+
+    // Angle around ring for color gradient
+    float angle = atan(vWorldPosition.y, vWorldPosition.x);
+    float t = (angle + 3.14159) / 6.28318;
+
+    // Ethereal color palette
+    vec3 purple = vec3(0.55, 0.25, 0.75);
+    vec3 teal = vec3(0.25, 0.65, 0.65);
+    vec3 green = vec3(0.25, 0.55, 0.4);
+    vec3 blue = vec3(0.3, 0.4, 0.65);
+
+    // 4-stop gradient
+    vec3 c1 = mix(purple, teal, smoothstep(0.0, 0.25, t));
+    vec3 c2 = mix(c1, green, smoothstep(0.25, 0.5, t));
+    vec3 c3 = mix(c2, blue, smoothstep(0.5, 0.75, t));
+    vec3 color = mix(c3, purple, smoothstep(0.75, 1.0, t));
+
+    // Brighten
+    color *= 1.5;
+
+    gl_FragColor = vec4(color, glow);
   }
 `;
 
@@ -41,6 +68,9 @@ function EtherealTorus() {
         fragmentShader={fragmentShader}
         transparent={true}
         depthWrite={false}
+        uniforms={{
+          uCameraPosition: { value: [0, 0, 10] }
+        }}
       />
     </mesh>
   );
