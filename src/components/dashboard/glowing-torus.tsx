@@ -2,47 +2,44 @@
 
 import { useRef, useMemo } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { shaderMaterial } from "@react-three/drei";
+import { Html } from "@react-three/drei";
+import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import * as THREE from "three";
-import { extend } from "@react-three/fiber";
 
 // ============================================
-// Shader Material Definition
-// ============================================
-
 // Vertex Shader
+// ============================================
 const vertexShader = /* glsl */ `
   varying vec3 vNormal;
   varying vec3 vPosition;
+  varying vec3 vViewPosition;
   varying vec2 vUv;
-  varying vec3 vWorldPosition;
 
   void main() {
+    vUv = uv;
     vNormal = normalize(normalMatrix * normal);
     vPosition = position;
-    vUv = uv;
 
-    vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-    vWorldPosition = worldPosition.xyz;
+    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    vViewPosition = -mvPosition.xyz;
 
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * mvPosition;
   }
 `;
 
-// Fragment Shader with Fresnel, Perlin Noise, and Chromatic Aberration
+// ============================================
+// Fragment Shader - Ethereal Fresnel Halo
+// ============================================
 const fragmentShader = /* glsl */ `
   uniform float uTime;
-  uniform float uColorProgress; // 0 = cyan/purple, 1 = green
-  uniform vec3 uCameraPosition;
+  uniform float uColorProgress;
 
   varying vec3 vNormal;
   varying vec3 vPosition;
+  varying vec3 vViewPosition;
   varying vec2 vUv;
-  varying vec3 vWorldPosition;
 
-  // ============================================
-  // Simplex 3D Noise (for smoky effect)
-  // ============================================
+  // Simplex 3D Noise
   vec4 permute(vec4 x) { return mod(((x*34.0)+1.0)*x, 289.0); }
   vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
 
@@ -106,255 +103,262 @@ const fragmentShader = /* glsl */ `
     return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
   }
 
-  // Fractal Brownian Motion for more complex noise
-  float fbm(vec3 p) {
-    float value = 0.0;
-    float amplitude = 0.5;
-    float frequency = 1.0;
+  void main() {
+    // Fresnel calculation - transparent center, opaque edges
+    vec3 viewDir = normalize(vViewPosition);
+    float fresnel = 1.0 - abs(dot(viewDir, vNormal));
+    fresnel = pow(fresnel, 2.5); // Sharper edge falloff
 
-    for (int i = 0; i < 5; i++) {
-      value += amplitude * snoise(p * frequency);
-      amplitude *= 0.5;
-      frequency *= 2.0;
+    // Animated noise for drifting smoke effect
+    float timeScale = uTime * 0.08; // Slow drift
+    vec3 noiseCoord = vPosition * 1.5 + vec3(timeScale, timeScale * 0.7, timeScale * 0.5);
+    float noise = snoise(noiseCoord) * 0.5 + 0.5;
+
+    // Second noise layer for more organic movement
+    vec3 noiseCoord2 = vPosition * 2.5 + vec3(-timeScale * 0.5, timeScale * 0.3, -timeScale * 0.8);
+    float noise2 = snoise(noiseCoord2) * 0.5 + 0.5;
+
+    // Blend noises
+    float blendedNoise = mix(noise, noise2, 0.5);
+
+    // Color gradient: Cyan (#00FFFF) -> Lime (#00FF00) -> Violet (#8A2BE2)
+    vec3 cyan = vec3(0.0, 1.0, 1.0);
+    vec3 lime = vec3(0.0, 1.0, 0.0);
+    vec3 violet = vec3(0.54, 0.17, 0.89);
+
+    // Green transition colors
+    vec3 emerald = vec3(0.2, 0.9, 0.4);
+    vec3 mint = vec3(0.4, 1.0, 0.6);
+
+    // Mix based on noise and position for flowing gradient
+    float gradientPos = fract(blendedNoise + vUv.x * 0.5 + uTime * 0.02);
+
+    vec3 baseColor;
+    if (uColorProgress < 0.5) {
+      // Cyan -> Lime -> Violet palette
+      if (gradientPos < 0.33) {
+        baseColor = mix(cyan, lime, gradientPos * 3.0);
+      } else if (gradientPos < 0.66) {
+        baseColor = mix(lime, violet, (gradientPos - 0.33) * 3.0);
+      } else {
+        baseColor = mix(violet, cyan, (gradientPos - 0.66) * 3.0);
+      }
+    } else {
+      // Transition to green palette
+      float greenMix = (uColorProgress - 0.5) * 2.0;
+      vec3 greenBase;
+      if (gradientPos < 0.5) {
+        greenBase = mix(emerald, mint, gradientPos * 2.0);
+      } else {
+        greenBase = mix(mint, emerald, (gradientPos - 0.5) * 2.0);
+      }
+
+      // Blend between original and green
+      if (gradientPos < 0.33) {
+        baseColor = mix(mix(cyan, lime, gradientPos * 3.0), greenBase, greenMix);
+      } else if (gradientPos < 0.66) {
+        baseColor = mix(mix(lime, violet, (gradientPos - 0.33) * 3.0), greenBase, greenMix);
+      } else {
+        baseColor = mix(mix(violet, cyan, (gradientPos - 0.66) * 3.0), greenBase, greenMix);
+      }
     }
 
-    return value;
-  }
+    // Apply fresnel - edges are bright and opaque, center is transparent
+    vec3 finalColor = baseColor * (0.5 + fresnel * 1.5);
 
-  // ============================================
-  // Main Fragment Shader
-  // ============================================
-  void main() {
-    // Calculate view direction for Fresnel
-    vec3 viewDir = normalize(uCameraPosition - vWorldPosition);
+    // Add extra glow at edges for bloom to pick up
+    finalColor += baseColor * fresnel * 0.8;
 
-    // ============================================
-    // Fresnel Effect (glass-like edges)
-    // ============================================
-    float fresnel = pow(1.0 - abs(dot(viewDir, vNormal)), 3.0);
-    fresnel = clamp(fresnel, 0.0, 1.0);
+    // Alpha: transparent in center, opaque at edges (fresnel-based)
+    float alpha = fresnel * 0.9;
 
-    // ============================================
-    // Perlin Noise for smoky color flow
-    // ============================================
-    // Animate noise through the torus
-    vec3 noisePos = vPosition * 2.0 + vec3(uTime * 0.15, uTime * 0.1, uTime * 0.12);
-    float noise1 = fbm(noisePos);
-    float noise2 = fbm(noisePos + vec3(100.0, 0.0, 0.0));
-    float noise3 = fbm(noisePos + vec3(0.0, 100.0, 0.0));
-
-    // Remap noise to 0-1 range
-    noise1 = noise1 * 0.5 + 0.5;
-    noise2 = noise2 * 0.5 + 0.5;
-    noise3 = noise3 * 0.5 + 0.5;
-
-    // ============================================
-    // Color Palette (Cyberpunk: Cyan, Purple, Deep Black)
-    // ============================================
-    vec3 cyanColor = vec3(0.0, 0.9, 0.95);      // Neon cyan
-    vec3 purpleColor = vec3(0.6, 0.2, 0.9);     // Neon purple
-    vec3 tealColor = vec3(0.1, 0.7, 0.7);       // Deep teal
-    vec3 pinkColor = vec3(0.9, 0.3, 0.6);       // Hot pink accent
-
-    // Green palette for transition
-    vec3 greenColor = vec3(0.2, 0.9, 0.4);      // Neon green
-    vec3 emeraldColor = vec3(0.1, 0.7, 0.5);    // Emerald
-
-    // Mix colors based on noise and color progress
-    vec3 baseColor1 = mix(cyanColor, greenColor, uColorProgress);
-    vec3 baseColor2 = mix(purpleColor, emeraldColor, uColorProgress);
-    vec3 baseColor3 = mix(tealColor, greenColor * 0.8, uColorProgress);
-
-    // Create smoky color blend using noise
-    vec3 smokyColor = mix(baseColor1, baseColor2, noise1);
-    smokyColor = mix(smokyColor, baseColor3, noise2 * 0.5);
-
-    // Add pink/accent highlights in high noise areas
-    vec3 accentColor = mix(pinkColor, vec3(0.4, 0.95, 0.6), uColorProgress);
-    smokyColor = mix(smokyColor, accentColor, pow(noise3, 2.0) * 0.4);
-
-    // ============================================
-    // Chromatic Aberration (RGB channel separation)
-    // ============================================
-    float aberrationStrength = 0.15 * fresnel;
-
-    // Offset each color channel slightly based on fresnel
-    vec3 aberratedColor;
-    aberratedColor.r = smokyColor.r * (1.0 + aberrationStrength);
-    aberratedColor.g = smokyColor.g;
-    aberratedColor.b = smokyColor.b * (1.0 - aberrationStrength * 0.5);
-
-    // ============================================
-    // Final Color Composition
-    // ============================================
-
-    // Core glow (inner part of torus)
-    float coreGlow = 1.0 - fresnel;
-    coreGlow = pow(coreGlow, 1.5);
-
-    // Edge glow (fresnel-based)
-    float edgeGlow = pow(fresnel, 2.0);
-
-    // Combine: smoky interior + bright edges
-    vec3 finalColor = aberratedColor * coreGlow * 0.6;
-    finalColor += aberratedColor * edgeGlow * 1.5;
-
-    // Add extra bloom on edges
-    vec3 bloomColor = mix(cyanColor, greenColor, uColorProgress);
-    finalColor += bloomColor * edgeGlow * 0.5;
-
-    // Add subtle noise-based shimmer
-    float shimmer = snoise(vPosition * 10.0 + uTime * 0.5) * 0.1 + 0.9;
-    finalColor *= shimmer;
-
-    // Alpha based on visibility (more opaque at edges, translucent in middle)
-    float alpha = 0.3 + edgeGlow * 0.6 + coreGlow * 0.2;
-    alpha *= 0.85; // Overall transparency
+    // Boost alpha slightly for visibility
+    alpha = clamp(alpha + 0.1, 0.0, 1.0);
 
     gl_FragColor = vec4(finalColor, alpha);
   }
 `;
 
-// Create the shader material class
-const GlowingTorusMaterial = shaderMaterial(
-  {
-    uTime: 0,
-    uColorProgress: 0,
-    uCameraPosition: new THREE.Vector3(0, 0, 5),
-  },
-  vertexShader,
-  fragmentShader
-);
-
-// Extend Three.js with our custom material
-extend({ GlowingTorusMaterial });
-
-// Type for the material ref
-type GlowingTorusMaterialType = THREE.ShaderMaterial & {
-  uniforms: {
-    uTime: { value: number };
-    uColorProgress: { value: number };
-    uCameraPosition: { value: THREE.Vector3 };
-  };
-};
-
 // ============================================
-// Torus Mesh Component
+// Ethereal Torus Mesh
 // ============================================
-interface TorusMeshProps {
+interface EtherealTorusProps {
   colorProgress: number;
 }
 
-function TorusMesh({ colorProgress }: TorusMeshProps) {
+function EtherealTorus({ colorProgress }: EtherealTorusProps) {
   const meshRef = useRef<THREE.Mesh>(null);
-  const materialRef = useRef<GlowingTorusMaterialType>(null);
 
-  // Create material instance
+  // Create shader material
   const material = useMemo(() => {
-    const mat = new GlowingTorusMaterial();
-    mat.transparent = true;
-    mat.side = THREE.DoubleSide;
-    mat.depthWrite = false;
-    return mat;
+    return new THREE.ShaderMaterial({
+      vertexShader,
+      fragmentShader,
+      uniforms: {
+        uTime: { value: 0 },
+        uColorProgress: { value: 0 },
+      },
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
   }, []);
 
-  // Animate the shader
+  // Animate
   useFrame((state) => {
-    if (material) {
-      material.uniforms.uTime.value = state.clock.elapsedTime;
-      material.uniforms.uColorProgress.value = colorProgress;
-      material.uniforms.uCameraPosition.value.copy(state.camera.position);
-    }
+    material.uniforms.uTime.value = state.clock.elapsedTime;
+    material.uniforms.uColorProgress.value = colorProgress;
 
-    // Subtle rotation
+    // Very subtle rotation
     if (meshRef.current) {
-      meshRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 0.1) * 0.05;
-      meshRef.current.rotation.y = state.clock.elapsedTime * 0.05;
+      meshRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 0.1) * 0.02;
+      meshRef.current.rotation.z = state.clock.elapsedTime * 0.015;
     }
   });
 
   return (
     <mesh ref={meshRef} material={material}>
-      {/* Torus: radius, tube radius, radial segments, tubular segments */}
-      <torusGeometry args={[2.2, 0.35, 64, 128]} />
+      {/* High segment count for smooth appearance */}
+      <torusGeometry args={[1.8, 0.4, 128, 128]} />
     </mesh>
   );
 }
 
 // ============================================
-// Outer Glow Effect (Post-process bloom simulation)
+// Text Overlay Component
 // ============================================
-function OuterGlow({ colorProgress }: { colorProgress: number }) {
-  const meshRef = useRef<THREE.Mesh>(null);
+interface TextOverlayProps {
+  greeting: string;
+  showScore: boolean;
+  score: number;
+}
 
-  useFrame((state) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y = state.clock.elapsedTime * 0.05;
-      // Pulsing scale
-      const pulse = Math.sin(state.clock.elapsedTime * 0.5) * 0.05 + 1;
-      meshRef.current.scale.setScalar(pulse);
-    }
-  });
-
-  const glowColor = useMemo(() => {
-    if (colorProgress > 0.7) {
-      return new THREE.Color(0.2, 0.9, 0.5); // Green
-    } else if (colorProgress > 0.3) {
-      const t = (colorProgress - 0.3) / 0.4;
-      return new THREE.Color(
-        0.0 + t * 0.2,
-        0.8 + t * 0.1,
-        0.9 - t * 0.4
-      );
-    }
-    return new THREE.Color(0.0, 0.8, 0.9); // Cyan
-  }, [colorProgress]);
-
+function TextOverlay({ greeting, showScore, score }: TextOverlayProps) {
   return (
-    <mesh ref={meshRef}>
-      <torusGeometry args={[2.2, 0.5, 32, 64]} />
-      <meshBasicMaterial
-        color={glowColor}
-        transparent
-        opacity={0.15}
-        side={THREE.DoubleSide}
-      />
-    </mesh>
+    <Html center>
+      <div
+        className="flex flex-col items-center justify-center pointer-events-none select-none"
+        style={{
+          fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+          textAlign: "center",
+          transition: "opacity 0.5s ease-in-out",
+        }}
+      >
+        {!showScore ? (
+          <p
+            className="text-white font-light tracking-wide"
+            style={{
+              fontSize: "clamp(1.25rem, 3vw, 1.75rem)",
+              opacity: 0.95,
+              textShadow: "0 0 20px rgba(0, 255, 255, 0.3)",
+            }}
+          >
+            {greeting}
+          </p>
+        ) : (
+          <div className="flex flex-col items-center">
+            <p
+              className="text-white/70 uppercase tracking-widest"
+              style={{ fontSize: "0.7rem", marginBottom: "0.25rem" }}
+            >
+              Sleep
+            </p>
+            <p
+              className="font-light"
+              style={{
+                fontSize: "clamp(3rem, 8vw, 4.5rem)",
+                color: "#00FF88",
+                textShadow: "0 0 30px rgba(0, 255, 136, 0.5)",
+              }}
+            >
+              {score}
+            </p>
+            <p
+              className="text-white/50"
+              style={{ fontSize: "0.65rem", marginTop: "0.25rem" }}
+            >
+              Last night
+            </p>
+          </div>
+        )}
+      </div>
+    </Html>
   );
 }
 
 // ============================================
-// Main Canvas Component
+// Main Scene Component
+// ============================================
+interface SceneProps {
+  colorProgress: number;
+  greeting: string;
+  showScore: boolean;
+  score: number;
+}
+
+function Scene({ colorProgress, greeting, showScore, score }: SceneProps) {
+  return (
+    <>
+      {/* Ethereal Torus */}
+      <EtherealTorus colorProgress={colorProgress} />
+
+      {/* Text Overlay */}
+      <TextOverlay greeting={greeting} showScore={showScore} score={score} />
+
+      {/* Post-processing: Bloom for mystical glow */}
+      <EffectComposer>
+        <Bloom
+          intensity={1.5}
+          luminanceThreshold={0.1}
+          luminanceSmoothing={0.9}
+          mipmapBlur
+        />
+      </EffectComposer>
+    </>
+  );
+}
+
+// ============================================
+// Main Exported Component
 // ============================================
 interface GlowingTorusProps {
   colorProgress?: number;
+  greeting?: string;
+  showScore?: boolean;
+  score?: number;
   className?: string;
 }
 
-export function GlowingTorus({ colorProgress = 0, className = "" }: GlowingTorusProps) {
+export function GlowingTorus({
+  colorProgress = 0,
+  greeting = "Good morning, Rohan",
+  showScore = false,
+  score = 85,
+  className = "",
+}: GlowingTorusProps) {
   return (
     <div className={`w-full h-full ${className}`}>
       <Canvas
-        camera={{ position: [0, 0, 6], fov: 45 }}
+        camera={{ position: [0, 0, 5], fov: 50 }}
         gl={{
           antialias: true,
-          alpha: true,
+          alpha: false,
           powerPreference: "high-performance",
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: 1.2,
         }}
-        style={{ background: "transparent" }}
+        style={{ background: "#050505" }}
       >
-        {/* Ambient light for base illumination */}
-        <ambientLight intensity={0.2} />
+        {/* Minimal ambient light */}
+        <ambientLight intensity={0.1} />
 
-        {/* Point lights for dramatic effect */}
-        <pointLight position={[5, 5, 5]} intensity={0.5} color="#00ffff" />
-        <pointLight position={[-5, -5, 5]} intensity={0.3} color="#9933ff" />
-
-        {/* Outer glow layer */}
-        <OuterGlow colorProgress={colorProgress} />
-
-        {/* Main torus with shader */}
-        <TorusMesh colorProgress={colorProgress} />
+        <Scene
+          colorProgress={colorProgress}
+          greeting={greeting}
+          showScore={showScore}
+          score={score}
+        />
       </Canvas>
     </div>
   );
