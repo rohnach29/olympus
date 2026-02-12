@@ -37,16 +37,25 @@ const defaultRecommendations = [
     icon: Dumbbell,
     title: "Upper body strength workout",
     description: "Your recovery is good - perfect for moderate intensity",
+    accent: "border-l-blue-500",
+    iconBg: "bg-blue-500/10",
+    iconColor: "text-blue-400",
   },
   {
     icon: Utensils,
     title: "Increase protein intake",
     description: "You're 20g below your daily target",
+    accent: "border-l-orange-500",
+    iconBg: "bg-orange-500/10",
+    iconColor: "text-orange-400",
   },
   {
     icon: Moon,
     title: "Wind down by 10:30 PM",
     description: "For optimal sleep based on your patterns",
+    accent: "border-l-purple-500",
+    iconBg: "bg-purple-500/10",
+    iconColor: "text-purple-400",
   },
 ];
 
@@ -199,14 +208,16 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* Quick Actions */}
-      <section>
+      <section className="animate-fade-in-up">
         <QuickActions />
       </section>
 
       {/* Main Scores */}
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="col-span-1 md:col-span-2 lg:col-span-1">
-          <CardContent className="p-6 flex flex-col items-center justify-center min-h-[200px]">
+      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in-up animation-delay-100">
+        {/* Readiness - Hero Card */}
+        <Card className="col-span-1 md:col-span-2 lg:col-span-1 relative overflow-hidden border-primary/20 shadow-lg shadow-primary/5">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.06] to-purple-500/[0.04] pointer-events-none" />
+          <CardContent className="relative p-6 flex flex-col items-center justify-center min-h-[200px]">
             <ScoreRing
               score={scores.readiness}
               size="lg"
@@ -252,7 +263,7 @@ export default async function DashboardPage() {
       </section>
 
       {/* Key Metrics */}
-      <section>
+      <section className="animate-fade-in-up animation-delay-200">
         <h2 className="text-lg font-semibold mb-4">Today&apos;s Metrics</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <MetricCard
@@ -292,20 +303,20 @@ export default async function DashboardPage() {
       </section>
 
       {/* AI Recommendations */}
-      <section>
+      <section className="animate-fade-in-up animation-delay-300">
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Today&apos;s Recommendations</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
+            <div className="space-y-3">
               {defaultRecommendations.map((rec, index) => (
                 <div
                   key={index}
-                  className="flex items-start gap-4 p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                  className={`flex items-start gap-4 p-4 rounded-xl border-l-2 ${rec.accent} bg-white/[0.02] hover:bg-white/[0.05] transition-all duration-200 cursor-pointer hover:translate-x-1`}
                 >
-                  <div className="p-2 rounded-lg bg-primary/10">
-                    <rec.icon className="h-5 w-5 text-primary" />
+                  <div className={`p-2 rounded-lg ${rec.iconBg}`}>
+                    <rec.icon className={`h-5 w-5 ${rec.iconColor}`} />
                   </div>
                   <div>
                     <h3 className="font-medium">{rec.title}</h3>
@@ -321,24 +332,24 @@ export default async function DashboardPage() {
       </section>
 
       {/* Weekly Trends Preview */}
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card>
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 animate-fade-in-up animation-delay-400">
+        <Card className="overflow-hidden">
           <CardHeader>
             <CardTitle className="text-lg">Weekly Sleep Trend</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[200px] flex items-center justify-center text-muted-foreground">
+            <div className="h-[200px] flex items-center justify-center text-muted-foreground gradient-mesh rounded-xl">
               <p>Sleep chart will appear here</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="overflow-hidden">
           <CardHeader>
             <CardTitle className="text-lg">Weekly Activity</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[200px] flex items-center justify-center text-muted-foreground">
+            <div className="h-[200px] flex items-center justify-center text-muted-foreground gradient-mesh rounded-xl">
               <p>Activity chart will appear here</p>
             </div>
           </CardContent>

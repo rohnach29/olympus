@@ -43,12 +43,12 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r bg-card">
+    <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r border-white/[0.06] bg-card/30 backdrop-blur-2xl">
       <div className="flex h-full flex-col">
         {/* Logo */}
-        <div className="flex h-16 items-center gap-2 border-b px-6">
-          <div className="p-1.5 rounded-lg bg-primary/10">
-            <Activity className="h-6 w-6 text-primary" />
+        <div className="flex h-16 items-center gap-2 border-b border-white/[0.06] px-6">
+          <div className="p-1.5 rounded-lg bg-primary/10 shadow-md shadow-primary/20 animate-pulse-glow text-primary">
+            <Activity className="h-6 w-6" />
           </div>
           <span className="text-xl font-bold gradient-text">Olympus</span>
         </div>
@@ -62,13 +62,13 @@ export function Sidebar() {
                 key={item.name}
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
                   isActive
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    ? "bg-gradient-to-r from-primary/20 to-purple-500/15 text-white shadow-sm shadow-primary/10 border border-white/[0.06]"
+                    : "text-muted-foreground hover:bg-white/[0.04] hover:text-foreground"
                 )}
               >
-                <item.icon className="h-5 w-5" />
+                <item.icon className={cn("h-5 w-5", isActive && "text-primary")} />
                 {item.name}
               </Link>
             );
@@ -76,7 +76,7 @@ export function Sidebar() {
         </nav>
 
         {/* Bottom navigation */}
-        <div className="border-t px-3 py-4 space-y-1">
+        <div className="border-t border-white/[0.06] px-3 py-4 space-y-1">
           {bottomNav.map((item) => {
             const isActive = pathname === item.href;
             return (
@@ -84,10 +84,10 @@ export function Sidebar() {
                 key={item.name}
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
                   isActive
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    ? "bg-gradient-to-r from-primary/20 to-purple-500/15 text-white shadow-sm shadow-primary/10 border border-white/[0.06]"
+                    : "text-muted-foreground hover:bg-white/[0.04] hover:text-foreground"
                 )}
               >
                 <item.icon className="h-5 w-5" />
@@ -97,7 +97,7 @@ export function Sidebar() {
           })}
           <button
             onClick={handleSignOut}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-white/[0.04] hover:text-foreground transition-all duration-200"
           >
             <LogOut className="h-5 w-5" />
             Sign out

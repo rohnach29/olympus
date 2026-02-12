@@ -18,7 +18,7 @@ export function Header({ userName = "User" }: HeaderProps) {
     .slice(0, 2);
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-white/[0.06] bg-background/80 backdrop-blur-2xl px-6">
       <div>
         <h1 className="text-lg font-semibold">
           {greeting}, {userName.split(" ")[0]}
@@ -35,15 +35,17 @@ export function Header({ userName = "User" }: HeaderProps) {
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="h-5 w-5" />
-          <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-[10px] font-medium text-primary-foreground flex items-center justify-center">
+          <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-[10px] font-medium text-primary-foreground flex items-center justify-center animate-notification-pulse">
             3
           </span>
         </Button>
-        <Avatar className="h-9 w-9">
-          <AvatarFallback className="bg-primary/10 text-primary font-medium">
-            {initials}
-          </AvatarFallback>
-        </Avatar>
+        <div className="rounded-full p-[2px] bg-gradient-to-br from-primary to-purple-500">
+          <Avatar className="h-9 w-9 border-2 border-background">
+            <AvatarFallback className="bg-card text-foreground font-medium text-sm">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+        </div>
       </div>
     </header>
   );
