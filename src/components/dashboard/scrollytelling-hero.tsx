@@ -557,52 +557,68 @@ function ScrollReactiveRing({
     );
   }
 
-  // WebGL torus is now a fixed full-screen background
-  // Text overlays are handled here with HTML
+  // Frame-based animation background
+  // Text overlays are positioned to match ring center in video frames
   return (
     <>
-      {/* WebGL Torus - fixed full-screen background */}
-      <GlowingTorus />
+      {/* Frame-based ring animation - fixed full-screen background */}
+      <GlowingTorus progress={progress} />
 
-      {/* Text overlay - fixed position to match ring center exactly */}
-      <div className="fixed inset-0 z-10 flex items-center justify-center pl-[10vw]">
-        {/* Greeting */}
-        <motion.div
-          className="text-center px-4"
-          animate={{ opacity: showScore ? 0 : 1, y: showScore ? -20 : 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <p
-            className="text-3xl md:text-4xl lg:text-5xl font-extralight tracking-wide text-white/95 leading-tight"
-            style={{
-              textShadow: "0 0 60px rgba(140, 100, 200, 0.5), 0 0 120px rgba(80, 180, 180, 0.3)",
-              letterSpacing: "0.05em",
+      {/* Text overlay - centered in ring */}
+      <div className="fixed inset-0 z-10 pointer-events-none flex items-center justify-center">
+        {/* Container centered in viewport (ring is now centered due to scale) */}
+        <div className="relative">
+          {/* Greeting */}
+          <motion.div
+            className="text-center"
+            animate={{
+              opacity: showScore ? 0 : 1,
+              y: showScore ? -30 : 0,
+              scale: showScore ? 0.95 : 1,
             }}
+            transition={{ duration: 0.6, ease: "easeInOut" }}
           >
-            {greeting}
-          </p>
-        </motion.div>
+            <p
+              className="text-2xl md:text-3xl lg:text-4xl font-extralight tracking-wide text-white leading-tight whitespace-nowrap"
+              style={{
+                textShadow: "0 0 40px rgba(120, 180, 200, 0.4), 0 0 80px rgba(100, 140, 180, 0.2)",
+                letterSpacing: "0.08em",
+              }}
+            >
+              {greeting}
+            </p>
+          </motion.div>
 
-        {/* Score - absolutely positioned to overlap greeting space */}
-        <motion.div
-          className="absolute inset-0 flex flex-col items-center justify-center text-center px-4 pl-[10vw]"
-          animate={{ opacity: showScore ? 1 : 0, y: showScore ? 0 : 20 }}
-          transition={{ duration: 0.5, delay: showScore ? 0.2 : 0 }}
-        >
-          <p className="text-xs md:text-sm text-white/50 uppercase tracking-[0.3em] mb-3 font-light">
-            Sleep
-          </p>
-          <p
-            className="text-6xl md:text-7xl lg:text-8xl font-extralight tracking-tight"
-            style={{
-              color: "#00FF88",
-              textShadow: "0 0 60px rgba(0, 255, 136, 0.5), 0 0 120px rgba(0, 255, 136, 0.2)",
+          {/* Score - absolutely positioned to overlap */}
+          <motion.div
+            className="absolute inset-0 flex flex-col items-center justify-center text-center"
+            initial={{ opacity: 0, y: 30, scale: 1.05 }}
+            animate={{
+              opacity: showScore ? 1 : 0,
+              y: showScore ? 0 : 30,
+              scale: showScore ? 1 : 1.05,
             }}
+            transition={{ duration: 0.6, ease: "easeInOut", delay: showScore ? 0.1 : 0 }}
           >
-            {sleepScore}
-          </p>
-          <p className="text-xs text-white/40 mt-3 tracking-wider font-light">Last night</p>
-        </motion.div>
+            <p
+              className="text-[10px] md:text-xs text-white/40 uppercase tracking-[0.4em] mb-3 font-light"
+            >
+              Sleep
+            </p>
+            <p
+              className="text-5xl md:text-6xl lg:text-7xl font-thin tracking-tight"
+              style={{
+                color: "#4ADE80",
+                textShadow: "0 0 60px rgba(74, 222, 128, 0.5), 0 0 120px rgba(74, 222, 128, 0.2)",
+              }}
+            >
+              {sleepScore}
+            </p>
+            <p className="text-[10px] md:text-xs text-white/30 mt-3 tracking-[0.2em] font-light">
+              Last night
+            </p>
+          </motion.div>
+        </div>
       </div>
     </>
   );

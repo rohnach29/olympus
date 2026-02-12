@@ -1,127 +1,133 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Canvas } from "@react-three/fiber";
-import { PerspectiveCamera } from "@react-three/drei";
-import { EffectComposer, Bloom } from "@react-three/postprocessing";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 // ============================================
-// Vertex Shader
+// Canvas-based Frame Scrollytelling
 // ============================================
-const vertexShader = /* glsl */ `
-  varying vec3 vNormal;
-  varying vec3 vWorldPosition;
 
-  void main() {
-    vNormal = normalize(normalMatrix * normal);
-    vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`;
+const TOTAL_FRAMES = 120;
 
-// ============================================
-// Fragment Shader - Ethereal Glow with Color Gradient
-// ============================================
-const fragmentShader = /* glsl */ `
-  uniform vec3 uCameraPosition;
-  varying vec3 vNormal;
-  varying vec3 vWorldPosition;
+// Generate frame paths
+const framePaths = Array.from(
+  { length: TOTAL_FRAMES },
+  (_, i) => `/scrollytelling/f_${String(i + 1).padStart(3, "0")}.webp`
+);
 
-  void main() {
-    // Fresnel for soft edge glow
-    vec3 viewDir = normalize(uCameraPosition - vWorldPosition);
-    float fresnel = 1.0 - abs(dot(viewDir, vNormal));
-    float glow = pow(fresnel, 2.0);
-
-    // Angle around ring for color gradient
-    float angle = atan(vWorldPosition.y, vWorldPosition.x);
-    float t = (angle + 3.14159) / 6.28318;
-
-    // Ethereal color palette
-    vec3 purple = vec3(0.55, 0.25, 0.75);
-    vec3 teal = vec3(0.25, 0.65, 0.65);
-    vec3 green = vec3(0.25, 0.55, 0.4);
-    vec3 blue = vec3(0.3, 0.4, 0.65);
-
-    // 4-stop gradient
-    vec3 c1 = mix(purple, teal, smoothstep(0.0, 0.25, t));
-    vec3 c2 = mix(c1, green, smoothstep(0.25, 0.5, t));
-    vec3 c3 = mix(c2, blue, smoothstep(0.5, 0.75, t));
-    vec3 color = mix(c3, purple, smoothstep(0.75, 1.0, t));
-
-    // Brighten
-    color *= 1.5;
-
-    gl_FragColor = vec4(color, glow);
-  }
-`;
-
-// ============================================
-// Ethereal Torus Component - Shifted right to account for sidebar
-// ============================================
-function EtherealTorus() {
-  return (
-    <mesh rotation={[0.3, 0, 0.1]} position={[1, 0, 0]}>
-      <torusGeometry args={[2.8, 0.4, 64, 128]} />
-      <shaderMaterial
-        vertexShader={vertexShader}
-        fragmentShader={fragmentShader}
-        transparent={true}
-        depthWrite={false}
-        uniforms={{
-          uCameraPosition: { value: [0, 0, 10] }
-        }}
-      />
-    </mesh>
-  );
+interface GlowingTorusProps {
+  progress?: number;
 }
 
-// ============================================
-// Scene
-// ============================================
-function Scene() {
-  return (
-    <>
-      <color attach="background" args={["#0a0b0f"]} />
-      <PerspectiveCamera makeDefault position={[0, 0, 10]} fov={50} />
-      <EtherealTorus />
-      <EffectComposer>
-        <Bloom
-          luminanceThreshold={0.1}
-          luminanceSmoothing={0.9}
-          intensity={1.0}
-          mipmapBlur
-        />
-      </EffectComposer>
-    </>
+export function GlowingTorus({ progress = 0 }: GlowingTorusProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imagesRef = useRef<HTMLImageElement[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [loadProgress, setLoadProgress] = useState(0);
+  const currentFrameRef = useRef(0);
+
+  // Calculate current frame based on progress
+  const currentFrame = Math.min(
+    TOTAL_FRAMES - 1,
+    Math.floor(progress * TOTAL_FRAMES)
   );
-}
 
-// ============================================
-// Main Component
-// ============================================
-export function GlowingTorus() {
-  const [mounted, setMounted] = useState(false);
+  // Draw frame to canvas
+  const drawFrame = useCallback((frameIndex: number) => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    const img = imagesRef.current[frameIndex];
 
-  useEffect(() => {
-    setMounted(true);
+    if (canvas && ctx && img && img.complete) {
+      // Set canvas size to match image (only once)
+      if (canvas.width !== img.naturalWidth || canvas.height !== img.naturalHeight) {
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+      }
+      ctx.drawImage(img, 0, 0);
+      currentFrameRef.current = frameIndex;
+    }
   }, []);
 
-  if (!mounted) {
-    return <div className="fixed inset-0 w-full h-full -z-10 pointer-events-none bg-[#0a0b0f]" />;
-  }
+  // Preload all frames
+  useEffect(() => {
+    let loadedCount = 0;
+    const images: HTMLImageElement[] = [];
+
+    framePaths.forEach((src, index) => {
+      const img = new Image();
+      img.onload = () => {
+        loadedCount++;
+        setLoadProgress(Math.round((loadedCount / TOTAL_FRAMES) * 100));
+
+        if (loadedCount === TOTAL_FRAMES) {
+          setLoaded(true);
+          // Draw first frame once all loaded
+          drawFrame(0);
+        }
+      };
+      img.src = src;
+      images[index] = img;
+    });
+
+    imagesRef.current = images;
+  }, [drawFrame]);
+
+  // Update canvas when progress changes
+  useEffect(() => {
+    if (loaded && currentFrame !== currentFrameRef.current) {
+      drawFrame(currentFrame);
+    }
+  }, [currentFrame, loaded, drawFrame]);
 
   return (
-    <div className="fixed inset-0 w-full h-full -z-10 pointer-events-none">
-      <Canvas
-        gl={{
-          alpha: false,
-          antialias: true,
-          powerPreference: "high-performance",
+    <div className="fixed inset-0 w-full h-full -z-10 pointer-events-none bg-[#050608]">
+      {/* Canvas with scaling to fill viewport */}
+      <canvas
+        ref={canvasRef}
+        className="absolute w-full h-full"
+        style={{
+          objectFit: "cover",
+          objectPosition: "center",
+          // Scale up slightly to crop watermark and fill better
+          transform: "scale(1.15)",
+          transformOrigin: "center center",
         }}
-      >
-        <Scene />
-      </Canvas>
+      />
+
+      {/* Vignette overlay for depth */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: `
+            radial-gradient(ellipse 80% 80% at 43% 48%, transparent 30%, rgba(5,6,8,0.4) 70%, rgba(5,6,8,0.95) 100%)
+          `,
+        }}
+      />
+
+      {/* Top edge fade for header integration */}
+      <div
+        className="absolute inset-x-0 top-0 h-32 pointer-events-none"
+        style={{
+          background: "linear-gradient(to bottom, rgba(5,6,8,0.8) 0%, transparent 100%)",
+        }}
+      />
+
+      {/* Bottom edge fade */}
+      <div
+        className="absolute inset-x-0 bottom-0 h-24 pointer-events-none"
+        style={{
+          background: "linear-gradient(to top, rgba(5,6,8,0.9) 0%, transparent 100%)",
+        }}
+      />
+
+      {/* Loading indicator */}
+      {!loaded && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="text-white/30 text-sm font-light tracking-wider">
+            Loading {loadProgress}%
+          </div>
+        </div>
+      )}
     </div>
   );
 }
