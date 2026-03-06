@@ -23,7 +23,7 @@ The MCP server is the interesting part — it lets Claude autonomously query and
 ## What I Built
 
 **MCP Server** (`/mcp-server`)  
-Custom [Model Context Protocol](https://modelcontextprotocol.io/) server exposing 9 tools: health summaries, sleep analysis, HRV trends, workout logs, food logging, USDA search, blood work, and longevity metrics.
+Custom [Model Context Protocol](https://modelcontextprotocol.io/) server exposing 27 tools: health summaries, sleep analysis, HRV trends, workout logs, food logging, USDA search, blood work, and longevity metrics.
 
 **Apple Watch Integration**  
 Syncs real biometric data — sleep stages, HRV, workouts, recovery — from HealthKit.
