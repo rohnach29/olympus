@@ -69,7 +69,7 @@ Keyboard shortcuts:
 ### Technology
 
 - **3D rendering**: `@react-three/fiber` + `@react-three/drei` + `@react-three/postprocessing`
-- **3D models**: Procedurally generated using Three.js `BufferGeometry` + `Points` + `LineSegments`. The constellation aesthetic (dots at vertices, thin connecting lines) does NOT require pre-made GLTF files — it is built from coordinate arrays defining joint/vertex positions. Each organ visualization is a set of `[x,y,z]` arrays for vertices and edge pairs for connections, defined in TypeScript data files (e.g., `body-vertices.ts`, `brain-vertices.ts`). This avoids external asset dependencies entirely. If higher-fidelity models are desired later, GLTF files can be loaded and their geometry extracted for the wireframe rendering.
+- **3D models**: All visualizations (full body + organs) use **GLTF models rendered as constellation wireframes**. The pipeline: source low-poly anatomical GLTF models (CC0-licensed from Sketchfab or similar), load via `@react-three/drei`'s `useGLTF`, extract the mesh geometry, then render as `THREE.Points` (glowing vertices) + `THREE.WireframeGeometry` → `THREE.LineSegments` (thin connecting lines). The GLTF model itself is never displayed — it serves only as a source of anatomically accurate vertex positions. This ensures every organ looks realistic, not cartoony or hand-plotted. Models stored in `public/models/` (~50-200KB each, compressed).
 - **Camera transitions**: Animated camera position/target using `@react-three/drei`'s `CameraControls` or a custom `useFrame` tween with easing
 - **Post-processing**: Bloom effect for glow (via `@react-three/postprocessing` `Bloom` pass), subtle vignette. Bloom disabled when `prefers-reduced-motion` is set.
 - **Hotspot rendering**: HTML overlay elements positioned via `drei`'s `Html` component for crisp text at any zoom level
@@ -118,8 +118,8 @@ The `<BodyCanvas>` reads the current pathname via `usePathname()` and derives ca
 
 ### Loading & Performance
 
-- 3D geometry is procedural (TypeScript vertex arrays) — no GLTF download needed
-- Each organ's vertex data: ~5-15KB of TypeScript
+- 3D geometry extracted from GLTF models at runtime via `useGLTF`
+- GLTF models: ~50-200KB each (compressed), lazy-loaded per route
 - Fallback: constellation SVG (like the mockup) renders instantly while `<Canvas>` hydrates
 - Target: < 3s first meaningful paint, < 1s subsequent navigations
 - **Runtime performance target**: 60fps on Apple Silicon / discrete GPU, 30fps minimum on integrated Intel GPU at 1440p
