@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScoreRing } from "@/components/dashboard/score-ring";
-import { MetricCard } from "@/components/dashboard/metric-card";
 import {
   Heart,
   Activity,
@@ -302,36 +301,34 @@ export default function RecoveryPage() {
 
       {/* Key Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard
-          title="HRV"
-          value={data.metrics.hrv.value}
-          unit="ms"
-          change={Math.round(data.metrics.hrv.trend)}
-          icon={Activity}
-          iconColor="text-purple-500"
-        />
-        <MetricCard
-          title="Resting HR"
-          value={data.metrics.restingHr.value}
-          unit="bpm"
-          change={Math.round(data.metrics.restingHr.trend)}
-          icon={Heart}
-          iconColor="text-red-500"
-        />
-        <MetricCard
-          title="Respiratory Rate"
-          value={Number(data.metrics.respiratoryRate.value.toFixed(1))}
-          unit="br/min"
-          icon={Wind}
-          iconColor="text-blue-500"
-        />
-        <MetricCard
-          title="Active Calories"
-          value={data.metrics.activeCalories.value}
-          unit="kcal"
-          icon={Activity}
-          iconColor="text-orange-500"
-        />
+        {[
+          { title: "HRV", value: data.metrics.hrv.value, unit: "ms", change: Math.round(data.metrics.hrv.trend), icon: Activity, color: "text-purple-500" },
+          { title: "Resting HR", value: data.metrics.restingHr.value, unit: "bpm", change: Math.round(data.metrics.restingHr.trend), icon: Heart, color: "text-red-500" },
+          { title: "Respiratory Rate", value: Number(data.metrics.respiratoryRate.value.toFixed(1)), unit: "br/min", icon: Wind, color: "text-blue-500" },
+          { title: "Active Calories", value: data.metrics.activeCalories.value, unit: "kcal", icon: Activity, color: "text-orange-500" },
+        ].map((m) => (
+          <Card key={m.title}>
+            <CardContent className="p-5">
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">{m.title}</p>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-2xl font-bold font-mono tracking-tight">{m.value ?? "--"}</span>
+                    {m.unit && <span className="text-sm text-muted-foreground">{m.unit}</span>}
+                  </div>
+                  {m.change !== undefined && (
+                    <p className={`text-xs font-medium ${m.change >= 0 ? "text-green-400" : "text-red-400"}`}>
+                      {m.change >= 0 ? "+" : ""}{m.change}% vs last week
+                    </p>
+                  )}
+                </div>
+                <div className={`p-2.5 rounded-xl bg-white/[0.04] ${m.color}`}>
+                  <m.icon className="h-5 w-5" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Baseline Info */}
