@@ -18,7 +18,7 @@ export function QuickActions() {
         <Link key={action.label} href={action.href}>
           <Button
             variant="outline"
-            className={`gap-2 rounded-full px-5 transition-all duration-200 hover:scale-[1.02] hover:shadow-lg ${action.hoverGlow}`}
+            className={`gap-2 rounded-full px-4 py-1.5 text-xs transition-all duration-200 hover:shadow-lg ${action.hoverGlow}`}
           >
             <action.icon className={`h-4 w-4 ${action.color}`} />
             {action.label}
