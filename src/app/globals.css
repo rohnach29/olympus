@@ -1,65 +1,65 @@
 @import "tailwindcss";
 
-/* Olympus Design System - Dark Premium */
+/* Olympus: Obsidian Vitality Theme */
 :root {
-  /* Colors */
-  --background: 0 0% 100%;
-  --foreground: 0 0% 9%;
-  --card: 0 0% 100%;
-  --card-foreground: 0 0% 9%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 0 0% 9%;
-  --primary: 221 83% 53%;
+  --background: 228 14% 1%;
+  --foreground: 213 20% 93%;
+  --card: 228 12% 5%;
+  --card-foreground: 213 20% 93%;
+  --popover: 228 12% 5%;
+  --popover-foreground: 213 20% 93%;
+  --primary: 160 84% 39%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 0 0% 96%;
-  --secondary-foreground: 0 0% 9%;
-  --muted: 0 0% 96%;
-  --muted-foreground: 0 0% 45%;
-  --accent: 0 0% 96%;
-  --accent-foreground: 0 0% 9%;
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 0 0% 100%;
-  --border: 0 0% 90%;
-  --input: 0 0% 90%;
-  --ring: 221 83% 53%;
+  --secondary: 228 12% 8%;
+  --secondary-foreground: 213 20% 93%;
+  --muted: 228 12% 8%;
+  --muted-foreground: 215 15% 50%;
+  --accent: 228 12% 8%;
+  --accent-foreground: 213 20% 93%;
+  --destructive: 0 62% 30%;
+  --destructive-foreground: 213 20% 93%;
+  --border: 220 10% 8%;
+  --input: 220 10% 8%;
+  --ring: 160 84% 39%;
   --radius: 0.75rem;
 
-  /* Health-specific colors */
-  --health-green: 142 71% 45%;
-  --health-yellow: 48 96% 53%;
-  --health-orange: 25 95% 53%;
-  --health-red: 0 84% 60%;
-  --health-blue: 221 83% 53%;
-  --health-purple: 262 83% 58%;
+  /* Domain accent colors */
+  --health-green: 160 84% 39%;
+  --health-red: 0 72% 51%;
+  --health-indigo: 234 89% 74%;
+  --health-amber: 38 92% 50%;
+  --health-blue: 217 91% 60%;
+  --health-yellow: 45 93% 47%;
+  --health-purple: 263 70% 76%;
 
   /* Score colors */
-  --score-excellent: 142 71% 45%;
-  --score-good: 142 71% 45%;
-  --score-moderate: 48 96% 53%;
+  --score-excellent: 160 84% 39%;
+  --score-good: 160 84% 39%;
+  --score-moderate: 45 93% 47%;
   --score-low: 25 95% 53%;
-  --score-poor: 0 84% 60%;
+  --score-poor: 0 72% 51%;
 }
 
 .dark {
-  --background: 220 15% 4%;
-  --foreground: 210 20% 95%;
-  --card: 220 15% 8%;
-  --card-foreground: 210 20% 95%;
-  --popover: 220 15% 8%;
-  --popover-foreground: 210 20% 95%;
-  --primary: 221 83% 53%;
+  --background: 228 14% 1%;
+  --foreground: 213 20% 93%;
+  --card: 228 12% 5%;
+  --card-foreground: 213 20% 93%;
+  --popover: 228 12% 5%;
+  --popover-foreground: 213 20% 93%;
+  --primary: 160 84% 39%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 220 15% 13%;
-  --secondary-foreground: 210 20% 95%;
-  --muted: 220 15% 13%;
-  --muted-foreground: 215 15% 55%;
-  --accent: 220 15% 13%;
-  --accent-foreground: 210 20% 95%;
+  --secondary: 228 12% 8%;
+  --secondary-foreground: 213 20% 93%;
+  --muted: 228 12% 8%;
+  --muted-foreground: 215 15% 50%;
+  --accent: 228 12% 8%;
+  --accent-foreground: 213 20% 93%;
   --destructive: 0 62% 30%;
-  --destructive-foreground: 210 20% 95%;
-  --border: 215 15% 14%;
-  --input: 215 15% 14%;
-  --ring: 221 83% 53%;
+  --destructive-foreground: 213 20% 93%;
+  --border: 220 10% 8%;
+  --input: 220 10% 8%;
+  --ring: 160 84% 39%;
 }
 
 @theme inline {
@@ -89,34 +89,40 @@
 
   /* Health colors */
   --color-health-green: hsl(var(--health-green));
-  --color-health-yellow: hsl(var(--health-yellow));
-  --color-health-orange: hsl(var(--health-orange));
   --color-health-red: hsl(var(--health-red));
+  --color-health-indigo: hsl(var(--health-indigo));
+  --color-health-amber: hsl(var(--health-amber));
   --color-health-blue: hsl(var(--health-blue));
+  --color-health-yellow: hsl(var(--health-yellow));
   --color-health-purple: hsl(var(--health-purple));
+
+  /* Font families */
+  --font-sans: var(--font-sans), "DM Sans", system-ui, sans-serif;
+  --font-display: var(--font-display), "Outfit", system-ui, sans-serif;
+  --font-mono: var(--font-mono), "JetBrains Mono", monospace;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
-    --background: 220 15% 4%;
-    --foreground: 210 20% 95%;
-    --card: 220 15% 8%;
-    --card-foreground: 210 20% 95%;
-    --popover: 220 15% 8%;
-    --popover-foreground: 210 20% 95%;
-    --primary: 221 83% 53%;
+    --background: 228 14% 1%;
+    --foreground: 213 20% 93%;
+    --card: 228 12% 5%;
+    --card-foreground: 213 20% 93%;
+    --popover: 228 12% 5%;
+    --popover-foreground: 213 20% 93%;
+    --primary: 160 84% 39%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 15% 13%;
-    --secondary-foreground: 210 20% 95%;
-    --muted: 220 15% 13%;
-    --muted-foreground: 215 15% 55%;
-    --accent: 220 15% 13%;
-    --accent-foreground: 210 20% 95%;
+    --secondary: 228 12% 8%;
+    --secondary-foreground: 213 20% 93%;
+    --muted: 228 12% 8%;
+    --muted-foreground: 215 15% 50%;
+    --accent: 228 12% 8%;
+    --accent-foreground: 213 20% 93%;
     --destructive: 0 62% 30%;
-    --destructive-foreground: 210 20% 95%;
-    --border: 215 15% 14%;
-    --input: 215 15% 14%;
-    --ring: 221 83% 53%;
+    --destructive-foreground: 213 20% 93%;
+    --border: 220 10% 8%;
+    --input: 220 10% 8%;
+    --ring: 160 84% 39%;
   }
 }
 
@@ -132,206 +138,130 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.2);
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.4);
-}
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: hsl(var(--muted-foreground) / 0.15); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.3); }
 
 /* ============================
    Animations
    ============================ */
-
-/* Score ring fill animation */
 @keyframes score-fill {
-  from {
-    stroke-dashoffset: 283;
-  }
+  from { stroke-dashoffset: 283; }
 }
-
 .score-ring {
   animation: score-fill 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
-/* Fade in up entrance for cards */
 @keyframes fade-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-
 .animate-fade-in-up {
-  animation: fade-in-up 0.5s ease-out both;
+  animation: fade-in-up 0.4s ease-out both;
 }
 
-/* Staggered delays */
-.animation-delay-100 { animation-delay: 100ms; }
-.animation-delay-200 { animation-delay: 200ms; }
-.animation-delay-300 { animation-delay: 300ms; }
-.animation-delay-400 { animation-delay: 400ms; }
-.animation-delay-500 { animation-delay: 500ms; }
+.animation-delay-100 { animation-delay: 50ms; }
+.animation-delay-200 { animation-delay: 100ms; }
+.animation-delay-300 { animation-delay: 150ms; }
+.animation-delay-400 { animation-delay: 200ms; }
+.animation-delay-500 { animation-delay: 250ms; }
 
-/* Pulse glow for active scores */
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 0.3; }
+  50% { transform: scale(1.8); opacity: 0; }
+}
+/* Use on the dot element itself — the ::after creates the pulsing ring */
+.animate-pulse-dot {
+  position: relative;
+}
+.animate-pulse-dot::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  animation: pulse-dot 2.5s ease infinite;
+}
+/* Standalone pulsing ring (for use as a separate div) */
+.pulse-ring {
+  animation: pulse-dot 2.5s ease infinite;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+}
+
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  14% { transform: scale(1.25); }
+  28% { transform: scale(1); }
+  42% { transform: scale(1.12); }
+  56% { transform: scale(1); }
+}
+.animate-heartbeat {
+  animation: heartbeat 1.2s ease infinite;
+}
+
 @keyframes pulse-glow {
-  0%, 100% {
-    filter: drop-shadow(0 0 6px currentColor);
-    opacity: 1;
-  }
-  50% {
-    filter: drop-shadow(0 0 12px currentColor);
-    opacity: 0.9;
-  }
+  0%, 100% { filter: drop-shadow(0 0 6px currentColor); opacity: 1; }
+  50% { filter: drop-shadow(0 0 12px currentColor); opacity: 0.9; }
 }
-
 .animate-pulse-glow {
   animation: pulse-glow 3s ease-in-out infinite;
 }
 
-/* Shimmer sweep effect */
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
-.shimmer {
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    hsl(var(--foreground) / 0.04) 50%,
-    transparent 100%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 3s ease-in-out infinite;
-}
-
-/* Notification pulse */
 @keyframes notification-pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 4px hsl(var(--primary) / 0);
-  }
+  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4); }
+  50% { box-shadow: 0 0 0 4px hsl(var(--primary) / 0); }
 }
-
 .animate-notification-pulse {
   animation: notification-pulse 2s ease-in-out infinite;
 }
 
 /* ============================
-   Glassmorphism & Cards
+   Glassmorphism
    ============================ */
-
 .glass-card {
   background: hsl(var(--card) / 0.5);
   backdrop-filter: blur(24px) saturate(1.2);
   -webkit-backdrop-filter: blur(24px) saturate(1.2);
-  border: 1px solid hsl(0 0% 100% / 0.05);
-  box-shadow:
-    0 0 0 1px hsl(0 0% 100% / 0.02) inset,
-    0 4px 24px -4px hsl(0 0% 0% / 0.3);
-}
-
-.card-hover {
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
-}
-
-.card-hover:hover {
-  transform: translateY(-2px);
-  box-shadow:
-    0 0 0 1px hsl(0 0% 100% / 0.05) inset,
-    0 8px 32px -4px hsl(0 0% 0% / 0.4),
-    0 0 20px -4px hsl(var(--primary) / 0.08);
+  border: 1px solid hsl(0 0% 100% / 0.04);
 }
 
 /* ============================
    Glow effects
    ============================ */
-
-.glow-green {
-  box-shadow: 0 0 20px -4px hsl(var(--health-green) / 0.3),
-    0 0 6px -2px hsl(var(--health-green) / 0.15);
-}
-
-.glow-blue {
-  box-shadow: 0 0 20px -4px hsl(var(--health-blue) / 0.3),
-    0 0 6px -2px hsl(var(--health-blue) / 0.15);
-}
-
-.glow-purple {
-  box-shadow: 0 0 20px -4px hsl(var(--health-purple) / 0.3),
-    0 0 6px -2px hsl(var(--health-purple) / 0.15);
-}
-
-.glow-orange {
-  box-shadow: 0 0 20px -4px hsl(var(--health-orange) / 0.3),
-    0 0 6px -2px hsl(var(--health-orange) / 0.15);
-}
-
-.glow-red {
-  box-shadow: 0 0 20px -4px hsl(var(--health-red) / 0.3),
-    0 0 6px -2px hsl(var(--health-red) / 0.15);
-}
-
-.glow-yellow {
-  box-shadow: 0 0 20px -4px hsl(var(--health-yellow) / 0.3),
-    0 0 6px -2px hsl(var(--health-yellow) / 0.15);
-}
+.glow-green { box-shadow: 0 0 20px -4px hsl(var(--health-green) / 0.3); }
+.glow-red { box-shadow: 0 0 20px -4px hsl(var(--health-red) / 0.3); }
+.glow-indigo { box-shadow: 0 0 20px -4px hsl(var(--health-indigo) / 0.3); }
+.glow-amber { box-shadow: 0 0 20px -4px hsl(var(--health-amber) / 0.3); }
+.glow-blue { box-shadow: 0 0 20px -4px hsl(var(--health-blue) / 0.3); }
+.glow-purple { box-shadow: 0 0 20px -4px hsl(var(--health-purple) / 0.3); }
 
 /* ============================
    Text utilities
    ============================ */
-
-/* Gradient text */
 .gradient-text {
-  background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--health-purple)));
+  background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--health-indigo)));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-/* Health score colors */
 .score-excellent { color: hsl(var(--health-green)); }
 .score-good { color: hsl(var(--health-green)); }
 .score-moderate { color: hsl(var(--health-yellow)); }
-.score-low { color: hsl(var(--health-orange)); }
+.score-low { color: hsl(var(--health-amber)); }
 .score-poor { color: hsl(var(--health-red)); }
 
-.bg-score-excellent { background-color: hsl(var(--health-green)); }
-.bg-score-good { background-color: hsl(var(--health-green)); }
-.bg-score-moderate { background-color: hsl(var(--health-yellow)); }
-.bg-score-low { background-color: hsl(var(--health-orange)); }
-.bg-score-poor { background-color: hsl(var(--health-red)); }
-
 /* ============================
-   Gradient mesh backgrounds
+   Accessibility
    ============================ */
-
-.gradient-mesh {
-  background:
-    radial-gradient(ellipse at 20% 50%, hsl(var(--health-blue) / 0.08) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 50%, hsl(var(--health-purple) / 0.06) 0%, transparent 50%),
-    hsl(var(--card) / 0.5);
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .score-ring { animation: none; }
 }
