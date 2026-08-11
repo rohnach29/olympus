@@ -107,7 +107,8 @@ olympus/
 // The published record. content is IssueJSON (§3.4) — the contract.
 issues: { id, userId, issueDate (unique per user+kind), number (serial per user),
           kind: 'daily'|'extra'|'sunday', content: jsonb, audioUrl, audioDurationS,
-          status: 'published'|'failed', publishedAt, createdAt }
+          status: 'published'|'failed', publishedAt, openedAt (nullable — set on
+          first view; null = a morning you never read), createdAt }
 
 // Correlation-engine output; the newspaper's "beat sheet" memory.
 findings: { id, userId, exposure, outcome, lagDays, rho, pValue, qValue, nDays,
