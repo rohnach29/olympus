@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
-import { db, foodLogs, foods, recentFoods } from "@/lib/db";
-import { eq, and, desc } from "drizzle-orm";
+import { db, foodLogs } from "@/lib/db";
+import { eq, and } from "drizzle-orm";
 import { getTodayDateString, getUserTimezone } from "@/lib/utils/timezone";
 
 // GET - Get food logs for a specific date
@@ -86,7 +86,6 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const {
-      foodId,
       foodName,
       brand,
       servingQuantity,
@@ -127,7 +126,6 @@ export async function POST(request: NextRequest) {
       .insert(foodLogs)
       .values({
         userId: user.id,
-        foodId: foodId || null,
         foodName,
         brand: brand || null,
         servingQuantity: servingQuantity || 1,
@@ -152,21 +150,6 @@ export async function POST(request: NextRequest) {
         loggedDate: date,
       })
       .returning();
-
-    // Update recent foods if foodId provided
-    if (foodId) {
-      await db
-        .insert(recentFoods)
-        .values({
-          userId: user.id,
-          foodId,
-          lastUsedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: [recentFoods.userId, recentFoods.foodId],
-          set: { lastUsedAt: new Date() },
-        });
-    }
 
     return NextResponse.json({ log: newLog }, { status: 201 });
   } catch (error) {

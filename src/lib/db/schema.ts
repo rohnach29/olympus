@@ -67,80 +67,14 @@ export const healthMetrics = pgTable("health_metrics", {
   ),
 }));
 
-// Foods database
-export const foods = pgTable("foods", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  source: text("source").notNull().default("usda"), // 'usda', 'open_food_facts', 'user'
-  sourceId: text("source_id").unique(), // Original ID from source database (unique for deduplication)
-  name: text("name").notNull(),
-  brand: text("brand"),
-  barcode: text("barcode"),
-  category: text("category"),
-
-  // Serving info
-  servingSize: numeric("serving_size").notNull().default("100"),
-  servingUnit: text("serving_unit").notNull().default("g"),
-  servingSizeDescription: text("serving_size_description"), // e.g., "1 cup", "1 medium"
-
-  // Macronutrients (per serving)
-  calories: numeric("calories").notNull().default("0"),
-  proteinG: numeric("protein_g").notNull().default("0"),
-  fatG: numeric("fat_g").notNull().default("0"),
-  saturatedFatG: numeric("saturated_fat_g").default("0"),
-  transFatG: numeric("trans_fat_g").default("0"),
-  monounsaturatedFatG: numeric("monounsaturated_fat_g").default("0"),
-  polyunsaturatedFatG: numeric("polyunsaturated_fat_g").default("0"),
-  carbsG: numeric("carbs_g").notNull().default("0"),
-  fiberG: numeric("fiber_g").default("0"),
-  sugarG: numeric("sugar_g").default("0"),
-  addedSugarG: numeric("added_sugar_g").default("0"),
-
-  // Micronutrients - Vitamins (per serving)
-  vitaminAMcg: numeric("vitamin_a_mcg").default("0"),
-  vitaminCMg: numeric("vitamin_c_mg").default("0"),
-  vitaminDMcg: numeric("vitamin_d_mcg").default("0"),
-  vitaminEMg: numeric("vitamin_e_mg").default("0"),
-  vitaminKMcg: numeric("vitamin_k_mcg").default("0"),
-  thiaminMg: numeric("thiamin_mg").default("0"),
-  riboflavinMg: numeric("riboflavin_mg").default("0"),
-  niacinMg: numeric("niacin_mg").default("0"),
-  vitaminB6Mg: numeric("vitamin_b6_mg").default("0"),
-  folateMcg: numeric("folate_mcg").default("0"),
-  vitaminB12Mcg: numeric("vitamin_b12_mcg").default("0"),
-
-  // Micronutrients - Minerals (per serving)
-  calciumMg: numeric("calcium_mg").default("0"),
-  ironMg: numeric("iron_mg").default("0"),
-  magnesiumMg: numeric("magnesium_mg").default("0"),
-  phosphorusMg: numeric("phosphorus_mg").default("0"),
-  potassiumMg: numeric("potassium_mg").default("0"),
-  sodiumMg: numeric("sodium_mg").default("0"),
-  zincMg: numeric("zinc_mg").default("0"),
-  copperMg: numeric("copper_mg").default("0"),
-  manganeseMg: numeric("manganese_mg").default("0"),
-  seleniumMcg: numeric("selenium_mcg").default("0"),
-
-  // Other
-  cholesterolMg: numeric("cholesterol_mg").default("0"),
-  caffeineMg: numeric("caffeine_mg").default("0"),
-  waterG: numeric("water_g").default("0"),
-
-  // Metadata
-  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
-  isVerified: boolean("is_verified").default(false),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
 // Food logs (user's daily food entries)
 export const foodLogs = pgTable("food_logs", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  foodId: uuid("food_id").references(() => foods.id, { onDelete: "set null" }),
-
-  // Denormalized food data (in case food is deleted or for custom entries)
+  // Food data is stored denormalized: entries come from natural-language
+  // parsing, not a food table, so each log is self-contained.
   foodName: text("food_name").notNull(),
   brand: text("brand"),
 
@@ -206,44 +140,6 @@ export const nutritionGoals = pgTable("nutrition_goals", {
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-// Favorite foods (for quick access)
-export const favoriteFoods = pgTable("favorite_foods", {
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  foodId: uuid("food_id")
-    .notNull()
-    .references(() => foods.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => ({
-  pk: primaryKey({ columns: [table.userId, table.foodId] }),
-}));
-
-// Recent foods (auto-tracked for quick access)
-export const recentFoods = pgTable("recent_foods", {
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  foodId: uuid("food_id")
-    .notNull()
-    .references(() => foods.id, { onDelete: "cascade" }),
-  lastUsedAt: timestamp("last_used_at").defaultNow().notNull(),
-}, (table) => ({
-  pk: primaryKey({ columns: [table.userId, table.foodId] }),
-}));
-
-// Food portions (common serving sizes like "1 medium apple")
-export const foodPortions = pgTable("food_portions", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  foodId: uuid("food_id")
-    .notNull()
-    .references(() => foods.id, { onDelete: "cascade" }),
-  portionName: text("portion_name").notNull(), // e.g., "1 medium", "1 cup", "1 slice"
-  gramWeight: numeric("gram_weight").notNull(), // grams for this portion
-  isDefault: boolean("is_default").default(false), // show as default option
-  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // Legacy nutrition logs (keeping for backward compatibility)
@@ -416,11 +312,8 @@ export type NewUser = typeof users.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
 export type HealthMetric = typeof healthMetrics.$inferSelect;
 export type NewHealthMetric = typeof healthMetrics.$inferInsert;
-export type Food = typeof foods.$inferSelect;
-export type NewFood = typeof foods.$inferInsert;
 export type FoodLog = typeof foodLogs.$inferSelect;
 export type NewFoodLog = typeof foodLogs.$inferInsert;
-export type FoodPortion = typeof foodPortions.$inferSelect;
 export type NutritionGoal = typeof nutritionGoals.$inferSelect;
 export type NutritionLog = typeof nutritionLogs.$inferSelect;
 export type Workout = typeof workouts.$inferSelect;
