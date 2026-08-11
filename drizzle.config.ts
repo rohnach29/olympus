@@ -8,6 +8,11 @@ export default defineConfig({
   out: "./drizzle",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env.DATABASE_URL || "postgres://localhost:5432/olympus",
+    // Schema changes go over a direct (non-pooled) connection when one is
+    // available — DDL through a transaction pooler is unreliable.
+    url:
+      process.env.DIRECT_DATABASE_URL ||
+      process.env.DATABASE_URL ||
+      "postgres://localhost:5432/olympus",
   },
 });
