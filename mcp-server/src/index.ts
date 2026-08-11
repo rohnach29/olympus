@@ -1236,7 +1236,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "log_food",
-        description: "Log a food item the user has eaten. Estimate nutritional values from your own knowledge of the food and the portion described — there is no food database to look up. Give the total nutrition for the amount eaten, not per 100g.",
+        description: "Log a food item the user has eaten. Give the TOTAL nutrition for the amount eaten, not per 100g. Use the most accurate figures you can obtain — look them up if you have that ability, otherwise estimate from the food and portion described. Fill in the micronutrient fields whenever you can: anything you omit is stored as zero, which is indistinguishable from a genuine zero.",
         inputSchema: {
           type: "object",
           properties: {
@@ -1255,7 +1255,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             calories: {
               type: "number",
-              description: "Total calories for the amount eaten (estimated)",
+              description: "Total calories for the amount eaten",
             },
             proteinG: {
               type: "number",
