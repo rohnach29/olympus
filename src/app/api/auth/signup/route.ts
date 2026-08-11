@@ -23,6 +23,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Olympus is single-tenant. Two independent guards keep it that way:
+    //
+    // 1. An optional allowlist, which closes the window between deploying and
+    //    registering — otherwise anyone who finds the URL first could claim the
+    //    only account.
+    // 2. A hard cap of one account. This one is self-closing: it needs no
+    //    configuration and cannot be left switched on by mistake.
+    const allowedEmail = process.env.ALLOWED_SIGNUP_EMAIL?.trim().toLowerCase();
+    if (allowedEmail && email.toLowerCase() !== allowedEmail) {
+      return NextResponse.json(
+        { error: "Registration is not open." },
+        { status: 403 }
+      );
+    }
+
+    const [anyExistingUser] = await db
+      .select({ id: users.id })
+      .from(users)
+      .limit(1);
+
+    if (anyExistingUser) {
+      return NextResponse.json(
+        { error: "Registration is closed — this instance already has an account." },
+        { status: 403 }
+      );
+    }
+
     // Check if user already exists
     const existingUser = await db
       .select({ id: users.id })

@@ -9,22 +9,43 @@ export interface SessionData {
   isLoggedIn: boolean;
 }
 
-// Session options
-const sessionOptions: SessionOptions = {
-  password: process.env.SESSION_SECRET || "complex_password_at_least_32_characters_long_for_security",
-  cookieName: "olympus_session",
-  cookieOptions: {
-    secure: process.env.NODE_ENV === "production",
-    httpOnly: true,
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 7, // 1 week
-  },
-};
+/**
+ * Session options.
+ *
+ * There is deliberately no default secret. iron-session derives the cookie
+ * encryption key from this value, so a hardcoded fallback committed to the repo
+ * would let anyone who can read the source forge a valid session — and it would
+ * do so silently, which is worse than not booting at all.
+ *
+ * Resolved per call rather than at module load so that a build without the
+ * variable still succeeds; only actual requests fail, and they fail loudly.
+ */
+function getSessionOptions(): SessionOptions {
+  const password = process.env.SESSION_SECRET;
+
+  if (!password || password.length < 32) {
+    throw new Error(
+      "SESSION_SECRET is missing or shorter than 32 characters. " +
+        "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('base64url'))\""
+    );
+  }
+
+  return {
+    password,
+    cookieName: "olympus_session",
+    cookieOptions: {
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 7, // 1 week
+    },
+  };
+}
 
 // Get session from cookies
 export async function getSession() {
   const cookieStore = await cookies();
-  const session = await getIronSession<SessionData>(cookieStore, sessionOptions);
+  const session = await getIronSession<SessionData>(cookieStore, getSessionOptions());
   return session;
 }
 
