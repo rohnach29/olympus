@@ -13,7 +13,9 @@ import { z } from "zod";
  * made — the UI shows both so an estimate is never mistaken for a measurement.
  */
 
-const GEMINI_MODEL = process.env.GEMINI_FOOD_MODEL || "gemini-3.6-flash";
+// Flash Lite matched the larger flash models exactly on food estimation while
+// costing less and holding a separate rate-limit bucket. Override per environment.
+const GEMINI_MODEL = process.env.GEMINI_FOOD_MODEL || "gemini-3.5-flash-lite";
 const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 
 export class FoodParseError extends Error {
@@ -134,8 +136,12 @@ export async function parseFoodText(text: string): Promise<ParsedFoodItem[]> {
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
         contents: [{ role: "user", parts: [{ text: trimmed }] }],
+        // Sampling parameters are deliberately left at the model's defaults.
+        // Google advises against lowering temperature on Gemini 3 — greedy
+        // decoding makes these models leak reasoning into the output and get
+        // stuck in loops. The response schema is enforced server-side, so
+        // structure does not depend on the sampling settings.
         generationConfig: {
-          temperature: 0,
           responseMimeType: "application/json",
           responseSchema: GEMINI_RESPONSE_SCHEMA,
         },
