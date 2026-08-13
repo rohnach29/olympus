@@ -222,26 +222,6 @@ export interface Database {
           report_url?: string | null;
         };
       };
-      chat_messages: {
-        Row: {
-          id: string;
-          user_id: string;
-          role: string;
-          content: string;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          user_id: string;
-          role: string;
-          content: string;
-          created_at?: string;
-        };
-        Update: {
-          role?: string;
-          content?: string;
-        };
-      };
     };
   };
 }

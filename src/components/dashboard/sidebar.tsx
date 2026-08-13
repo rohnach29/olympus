@@ -11,8 +11,6 @@ import {
   Moon,
   Heart,
   FlaskConical,
-  Sparkles,
-  MessageCircle,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -24,8 +22,6 @@ const navigation = [
   { name: "Sleep", href: "/sleep", icon: Moon },
   { name: "Recovery", href: "/recovery", icon: Heart },
   { name: "Blood Work", href: "/blood-work", icon: FlaskConical },
-  { name: "Longevity", href: "/longevity", icon: Sparkles },
-  { name: "AI Coach", href: "/coach", icon: MessageCircle },
 ];
 
 const bottomNav = [

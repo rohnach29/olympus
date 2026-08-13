@@ -265,17 +265,6 @@ export const bloodWork = pgTable("blood_work", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Chat messages for AI coach
-export const chatMessages = pgTable("chat_messages", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  role: text("role").notNull(), // 'user', 'assistant', 'system'
-  content: text("content").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
 // API tokens for external integrations (Health Auto Export, etc.)
 export const apiTokens = pgTable("api_tokens", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -323,7 +312,6 @@ export type NewSleepSession = typeof sleepSessions.$inferInsert;
 export type DailyScore = typeof dailyScores.$inferSelect;
 export type NewDailyScore = typeof dailyScores.$inferInsert;
 export type BloodWorkResult = typeof bloodWork.$inferSelect;
-export type ChatMessage = typeof chatMessages.$inferSelect;
 export type ApiToken = typeof apiTokens.$inferSelect;
 export type NewApiToken = typeof apiTokens.$inferInsert;
 export type WebhookLog = typeof webhookLogs.$inferSelect;

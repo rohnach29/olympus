@@ -1,14 +1,13 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Utensils, Dumbbell, Moon, MessageCircle } from "lucide-react";
+import { Utensils, Dumbbell, Moon } from "lucide-react";
 import Link from "next/link";
 
 const actions = [
   { label: "Log Food", icon: Utensils, href: "/nutrition", color: "text-orange-400", hoverGlow: "hover:shadow-orange-500/20" },
   { label: "Log Workout", icon: Dumbbell, href: "/workouts", color: "text-blue-400", hoverGlow: "hover:shadow-blue-500/20" },
   { label: "Log Sleep", icon: Moon, href: "/sleep", color: "text-purple-400", hoverGlow: "hover:shadow-purple-500/20" },
-  { label: "Ask Coach", icon: MessageCircle, href: "/coach", color: "text-green-400", hoverGlow: "hover:shadow-green-500/20" },
 ];
 
 export function QuickActions() {
