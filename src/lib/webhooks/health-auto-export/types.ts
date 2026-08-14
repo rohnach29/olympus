@@ -5,9 +5,14 @@
  */
 
 // Individual metric data point
+// Most metrics carry `qty`; heart_rate (and other sampled vitals) carry
+// Min/Avg/Max per interval instead — same shape as HAEHeartRateSample below.
 export interface HAEMetricDataPoint {
   date: string; // ISO 8601 timestamp
-  qty: number;
+  qty?: number;
+  Avg?: number;
+  Min?: number;
+  Max?: number;
   source?: string;
 }
 

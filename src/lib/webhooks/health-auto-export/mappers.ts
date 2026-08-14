@@ -44,24 +44,30 @@ export function mapMetricToOlympus(
   const shouldRoundTimestamp = CUMULATIVE_METRICS.includes(metricType);
 
   return metric.data
-    .filter((point) => point.qty != null && !isNaN(point.qty))
     .map((point) => {
+      // heart_rate points carry Min/Avg/Max instead of qty — use Avg as the value
+      const qty = point.qty ?? point.Avg;
+      if (qty == null || isNaN(qty)) return null;
+
       const rawDate = new Date(point.date);
       const recordedAt = shouldRoundTimestamp ? roundToMinute(rawDate) : rawDate;
 
       return {
         userId,
         metricType,
-        value: String(point.qty),
+        value: String(qty),
         unit: metric.units || null,
         source: "apple_health",
         recordedAt,
         metadata: {
           originalName: metric.name,
           originalSource: point.source,
+          ...(point.Min != null && { min: point.Min }),
+          ...(point.Max != null && { max: point.Max }),
         },
       };
-    });
+    })
+    .filter((m): m is NonNullable<typeof m> => m !== null);
 }
 
 /**
