@@ -308,6 +308,13 @@ export const episodes = pgTable("episodes", {
   status: text("status").notNull(), // 'published', 'no_audio', 'expired'
   audioUrl: text("audio_url"), // Vercel Blob URL; null when unpublished or pruned
   audioDurationS: integer("audio_duration_s"),
+  // ~240 amplitude peaks (0-100) sampled from the finished audio, so the
+  // player can draw its trace without downloading and decoding the mp3.
+  // Kept after pruning: the shape of a morning outlives its sound.
+  waveform: jsonb("waveform"),
+  // Chunk boundaries as seconds into the episode, one per transcript line —
+  // the segment starts the player seeks to. A by-product of chunked synthesis.
+  segmentStarts: jsonb("segment_starts"),
   // Speaker-tagged lines: [{ speaker: 'ANCHOR', text: '...' }]. Tagged even
   // with one speaker so a second voice is a prompt change, not a migration.
   transcript: jsonb("transcript").notNull(),

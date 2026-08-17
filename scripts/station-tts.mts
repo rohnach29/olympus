@@ -15,8 +15,10 @@ config({ path: ".env.local", quiet: true });
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
-const MODEL = "gemini-3.1-flash-tts-preview";
-const FALLBACK_MODEL = "gemini-2.5-flash-preview-tts";
+// STATION_TTS_MODEL pins a single model — chunked episodes must not mix
+// models mid-show, so the pipeline pins whichever model chunk 1 came from.
+const MODEL = process.env.STATION_TTS_MODEL ?? "gemini-3.1-flash-tts-preview";
+const FALLBACK_MODEL = process.env.STATION_TTS_MODEL ?? "gemini-2.5-flash-preview-tts";
 const API = "https://generativelanguage.googleapis.com/v1beta/models";
 
 /**
@@ -65,6 +67,7 @@ function wav(pcm: Buffer, sampleRate: number): Buffer {
 async function synthesize(model: string, voice: string): Promise<{ pcm: Buffer; rate: number }> {
   const res = await fetch(`${API}/${model}:generateContent?key=${key}`, {
     method: "POST",
+    signal: AbortSignal.timeout(120_000),
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: `${DELIVERY_DIRECTION}\n\n${script}` }] }],
