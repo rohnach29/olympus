@@ -1,0 +1,70 @@
+name: Station Olympus — press run
+
+# The worker is never deployed. A runner checks this repo out, produces one
+# morning's show in about two minutes, and is destroyed. "Deploying" the
+# worker is `git push`.
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Morning to produce (YYYY-MM-DD). Blank means today."
+        required: false
+        type: string
+      no_audio:
+        description: "Write the show but skip synthesis (saves TTS quota)"
+        required: false
+        type: boolean
+        default: false
+      dry_run:
+        description: "Produce but publish nothing"
+        required: false
+        type: boolean
+        default: false
+
+  # 23:00 UTC is 04:30 in Asia/Kolkata — the show is finished before the alarm.
+  # Note this is already *tomorrow* where the listener sleeps, which is why the
+  # worker resolves the date in STATION_TZ rather than from UTC.
+  schedule:
+    - cron: "0 23 * * *"
+
+concurrency:
+  # Two press runs for the same morning would fight over the same episode row.
+  group: station-press-run
+  cancel-in-progress: false
+
+jobs:
+  press-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: worker/requirements.txt
+
+      - name: Install the worker
+        working-directory: worker
+        run: pip install -r requirements.txt
+
+      - name: Check the gate still holds
+        working-directory: worker
+        run: python -m pytest
+
+      - name: Press run
+        working-directory: worker
+        env:
+          STATION_API_URL: ${{ secrets.STATION_API_URL }}
+          STATION_SECRET: ${{ secrets.STATION_SECRET }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+          STATION_TZ: ${{ vars.STATION_TZ || 'Asia/Kolkata' }}
+          STATION_TTS_MODEL: ${{ vars.STATION_TTS_MODEL || 'gemini-3.1-flash-tts-preview' }}
+        run: |
+          python -m station.run \
+            ${{ inputs.date && format('--date {0}', inputs.date) || '' }} \
+            ${{ inputs.no_audio && '--no-audio' || '' }} \
+            ${{ inputs.dry_run && '--dry-run' || '' }}
