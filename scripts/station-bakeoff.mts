@@ -118,7 +118,12 @@ HOW THE COMEDY WORKS
 - Most facts are played straight — that's what makes the jokes land. Three or four real punchlines in the show, placed at the ends of items.
 - Jokes come from the specifics of THIS data — the bedtime, the meal, the gap between plans and reality. Nothing generic that could run any day.
 
-PERFORMED, NOT READ — a TTS voice will speak this verbatim. Flowing spoken sentences — clauses chained naturally, full stops for punches. Em-dash for a half-beat, ellipsis for one reveal-pause at most. No CAPS shouting, no bracketed stage directions, nothing you don't want said aloud. Spell numbers as words. Every number must come exactly from FACTS — never invent or estimate; if a fact is missing, report around it. Scores are out of one hundred, never percent.
+PERFORMED, NOT READ — a voice-clone TTS (Fish Audio S2.1) speaks this verbatim, and you direct the performance inline:
+- Square-bracket mood tags at the start of a sentence steer delivery until the next tag: [excited], [confident], [playful], [warm], [surprised], [emphasis]. Use four to eight across the show — set a mood per segment, and shift it for a punchline.
+- (break) is a short beat; (long-break) is a longer pause. This is your comic timing: a (break) before a punchline's payoff, a beat after a big number lands.
+- Energy also comes from the text itself: exclamation marks read brighter than full stops. Shape each sentence the way it should sound.
+- Never use laughing or chuckling effects. No CAPS shouting. Nothing in brackets or parentheses that isn't a direction.
+- Flowing spoken sentences — clauses chained naturally, full stops for punches. Spell numbers as words. Every number must come exactly from FACTS — never invent or estimate; if a fact is missing, report around it. Scores are out of one hundred, never percent.
 
 OUTPUT — only the words the host speaks.`;
 
