@@ -306,8 +306,8 @@ export function AppleHealthIntegration() {
           <div className="p-4 rounded-lg border border-dashed text-sm text-muted-foreground">
             <p className="font-medium text-foreground mb-2">How to connect:</p>
             <ol className="list-decimal list-inside space-y-1">
-              <li>Download "Health Auto Export" app from the App Store ($5)</li>
-              <li>Click "Add Token" above to generate your API credentials</li>
+              <li>Download the &ldquo;Health Auto Export&rdquo; app from the App Store ($5)</li>
+              <li>Click &ldquo;Add Token&rdquo; above to generate your API credentials</li>
               <li>Configure the app with your webhook URL and token</li>
               <li>Your Apple Watch data will sync automatically!</li>
             </ol>
