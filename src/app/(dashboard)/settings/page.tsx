@@ -1,11 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { User, Target, Bell, Shield, Database, Loader2, Check } from "lucide-react";
+import Link from "next/link";
 import { AppleHealthIntegration } from "@/components/integrations/apple-health-integration";
 
 interface UserSettings {
@@ -18,7 +14,6 @@ interface UserSettings {
   notificationsEnabled?: boolean;
 }
 
-// Common timezones for the dropdown
 const TIMEZONES = [
   { value: "Pacific/Honolulu", label: "Hawaii (UTC-10)" },
   { value: "America/Los_Angeles", label: "Pacific Time (UTC-8)" },
@@ -48,6 +43,76 @@ interface UserProfile {
   settings: UserSettings | null;
 }
 
+/** A ruled section of the sheet, numbered like a ledger entry. */
+function Section({
+  no,
+  title,
+  note,
+  children,
+}: {
+  no: string;
+  title: string;
+  note?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="mt-9">
+      <div className="flex items-baseline justify-between border-t border-[var(--lg-ink)] pb-5 pt-2.5">
+        <span className="font-[family-name:var(--lg-mono)] text-[10px] font-bold tracking-[.14em] text-[var(--lg-acc)]">
+          {no}
+        </span>
+        <span className="ledger-k">
+          {title}
+          {note ? ` — ${note}` : ""}
+        </span>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** Label above a hairline-ruled field, in the ledger's small-caps voice. */
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block font-[family-name:var(--lg-mono)] text-[9px] uppercase tracking-[.2em] text-[var(--lg-mut)]">
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+const inputClass =
+  "w-full border-0 border-b border-[var(--lg-rule)] bg-transparent pb-1.5 text-[18px] font-light text-[var(--lg-ink)] outline-none transition-colors focus:border-[var(--lg-ink)] disabled:text-[var(--lg-mut)]";
+
+function ActionButton({
+  onClick,
+  disabled,
+  children,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="mt-6 border border-[var(--lg-ink)] px-5 py-2 font-[family-name:var(--lg-mono)] text-[10px] uppercase tracking-[.2em] text-[var(--lg-ink)] transition-colors hover:bg-[var(--lg-ink)] hover:text-[var(--lg-paper)] disabled:border-[var(--lg-g3)] disabled:text-[var(--lg-g3)] disabled:hover:bg-transparent"
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -72,14 +137,11 @@ export default function SettingsPage() {
     stepsTarget: "10000",
   });
 
-  // Fetch user data on mount
   useEffect(() => {
     async function fetchUser() {
       try {
         const response = await fetch("/api/user");
-        if (!response.ok) {
-          throw new Error("Failed to fetch user data");
-        }
+        if (!response.ok) throw new Error("Failed to fetch user data");
         const data = await response.json();
         const user: UserProfile = data.user;
 
@@ -107,16 +169,13 @@ export default function SettingsPage() {
         setLoading(false);
       }
     }
-
     fetchUser();
   }, []);
 
-  // Save profile handler
   async function handleSaveProfile() {
     setSavingProfile(true);
     setProfileSaved(false);
     setError(null);
-
     try {
       const response = await fetch("/api/user", {
         method: "PATCH",
@@ -126,17 +185,13 @@ export default function SettingsPage() {
           dateOfBirth: profile.dateOfBirth || null,
           heightCm: profile.height ? parseFloat(profile.height) : null,
           weightKg: profile.weight ? parseFloat(profile.weight) : null,
-          settings: {
-            timezone: profile.timezone,
-          },
+          settings: { timezone: profile.timezone },
         }),
       });
-
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || "Failed to save profile");
       }
-
       setProfileSaved(true);
       setTimeout(() => setProfileSaved(false), 3000);
     } catch (err) {
@@ -147,12 +202,10 @@ export default function SettingsPage() {
     }
   }
 
-  // Save goals handler
   async function handleSaveGoals() {
     setSavingGoals(true);
     setGoalsSaved(false);
     setError(null);
-
     try {
       const response = await fetch("/api/user", {
         method: "PATCH",
@@ -166,12 +219,10 @@ export default function SettingsPage() {
           },
         }),
       });
-
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || "Failed to save goals");
       }
-
       setGoalsSaved(true);
       setTimeout(() => setGoalsSaved(false), 3000);
     } catch (err) {
@@ -182,324 +233,166 @@ export default function SettingsPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6 max-w-3xl">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-muted-foreground">
-          Manage your account and preferences
-        </p>
-      </div>
-
-      {/* Error Message */}
-      {error && (
-        <div className="p-4 rounded-lg bg-destructive/10 text-destructive text-sm">
-          {error}
-        </div>
-      )}
-
-      {/* Profile */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <User className="h-5 w-5" />
-            Profile
-          </CardTitle>
-          <CardDescription>Your personal information</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="fullName">Full Name</Label>
-              <Input
-                id="fullName"
-                value={profile.fullName}
-                onChange={(e) =>
-                  setProfile({ ...profile, fullName: e.target.value })
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={profile.email}
-                disabled
-                className="bg-muted"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="dob">Date of Birth</Label>
-              <Input
-                id="dob"
-                type="date"
-                value={profile.dateOfBirth}
-                onChange={(e) =>
-                  setProfile({ ...profile, dateOfBirth: e.target.value })
-                }
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-2">
-                <Label htmlFor="height">Height (cm)</Label>
-                <Input
-                  id="height"
-                  type="number"
-                  value={profile.height}
-                  onChange={(e) =>
-                    setProfile({ ...profile, height: e.target.value })
-                  }
-                />
+    <div className="ledger">
+      <main className="mx-auto max-w-[980px]">
+        <header>
+          <div className="flex items-baseline justify-between border-b-2 border-[var(--lg-ink)] pb-4">
+            <div className="text-[74px] font-extralight leading-none">Settings</div>
+            <div className="text-center">
+              <div className="text-[13px] font-semibold uppercase tracking-[.44em]">
+                Olympus · The Masthead
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="weight">Weight (kg)</Label>
-                <Input
-                  id="weight"
-                  type="number"
-                  value={profile.weight}
-                  onChange={(e) =>
-                    setProfile({ ...profile, weight: e.target.value })
-                  }
-                />
-              </div>
+              <div className="ledger-k mt-1.5">Who you are, and what counts as a good day</div>
             </div>
-            <div className="space-y-2 col-span-2">
-              <Label htmlFor="timezone">Timezone</Label>
-              <select
-                id="timezone"
-                value={profile.timezone}
-                onChange={(e) =>
-                  setProfile({ ...profile, timezone: e.target.value })
-                }
-                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-              >
-                {TIMEZONES.map((tz) => (
-                  <option key={tz.value} value={tz.value}>
-                    {tz.label}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-muted-foreground">
-                Used for calculating daily metrics like steps and calories
+          </div>
+
+          <nav className="flex justify-between pt-2 font-[family-name:var(--lg-mono)] text-[10px] tracking-[.14em]">
+            <Link href="/" className="text-[var(--lg-mut)] hover:text-[var(--lg-ink)]">
+              ← BACK TO TODAY
+            </Link>
+            <span className="flex gap-2">
+              <Link href="/" className="text-[var(--lg-mut)] hover:text-[var(--lg-ink)]">
+                TODAY
+              </Link>
+              <span className="text-[var(--lg-g3)]">·</span>
+              <Link href="/history" className="text-[var(--lg-mut)] hover:text-[var(--lg-ink)]">
+                ALMANAC
+              </Link>
+              <span className="text-[var(--lg-g3)]">·</span>
+              <Link href="/blood-work" className="text-[var(--lg-mut)] hover:text-[var(--lg-ink)]">
+                BLOOD WORK
+              </Link>
+            </span>
+            <span className="font-bold text-[var(--lg-acc)]">SETTINGS</span>
+          </nav>
+        </header>
+
+        {error && (
+          <p className="mt-6 border-l-2 border-[var(--lg-acc)] pl-4 text-[14px] text-[var(--lg-acc)]">
+            {error}
+          </p>
+        )}
+
+        {loading ? (
+          <p className="mt-16 font-[family-name:var(--lg-mono)] text-[11px] tracking-[.2em] text-[var(--lg-mut)]">
+            LOADING YOUR PROFILE…
+          </p>
+        ) : (
+          <>
+            <Section no="1.1" title="Profile" note="the constants behind every score">
+              <div className="grid grid-cols-3 gap-x-10 gap-y-7">
+                <Field label="Full name">
+                  <input
+                    className={inputClass}
+                    value={profile.fullName}
+                    onChange={(e) => setProfile({ ...profile, fullName: e.target.value })}
+                  />
+                </Field>
+                <Field label="Email">
+                  <input className={inputClass} value={profile.email} disabled />
+                </Field>
+                <Field label="Date of birth">
+                  <input
+                    type="date"
+                    className={inputClass}
+                    value={profile.dateOfBirth}
+                    onChange={(e) =>
+                      setProfile({ ...profile, dateOfBirth: e.target.value })
+                    }
+                  />
+                </Field>
+                <Field label="Height (cm)">
+                  <input
+                    type="number"
+                    className={inputClass}
+                    value={profile.height}
+                    onChange={(e) => setProfile({ ...profile, height: e.target.value })}
+                  />
+                </Field>
+                <Field label="Weight (kg)">
+                  <input
+                    type="number"
+                    className={inputClass}
+                    value={profile.weight}
+                    onChange={(e) => setProfile({ ...profile, weight: e.target.value })}
+                  />
+                </Field>
+                <Field label="Timezone">
+                  <select
+                    className={inputClass}
+                    value={profile.timezone}
+                    onChange={(e) => setProfile({ ...profile, timezone: e.target.value })}
+                  >
+                    {TIMEZONES.map((tz) => (
+                      <option key={tz.value} value={tz.value}>
+                        {tz.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+              <p className="mt-4 font-[family-name:var(--lg-mono)] text-[9px] tracking-[.1em] text-[var(--lg-mut)]">
+                THE TIMEZONE DECIDES WHERE EACH DAY STARTS AND ENDS ON THE LEDGER.
               </p>
-            </div>
-          </div>
-          <Button onClick={handleSaveProfile} disabled={savingProfile}>
-            {savingProfile ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Saving...
-              </>
-            ) : profileSaved ? (
-              <>
-                <Check className="h-4 w-4 mr-2" />
-                Saved!
-              </>
-            ) : (
-              "Save Profile"
-            )}
-          </Button>
-        </CardContent>
-      </Card>
+              <ActionButton onClick={handleSaveProfile} disabled={savingProfile}>
+                {savingProfile ? "Saving…" : profileSaved ? "✓ Saved" : "Save profile"}
+              </ActionButton>
+            </Section>
 
-      {/* Goals */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Target className="h-5 w-5" />
-            Daily Goals
-          </CardTitle>
-          <CardDescription>Set your daily health targets</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="sleepTarget">Sleep Target (hours)</Label>
-              <Input
-                id="sleepTarget"
-                type="number"
-                value={goals.sleepTarget}
-                onChange={(e) =>
-                  setGoals({ ...goals, sleepTarget: e.target.value })
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="calorieTarget">Calorie Target (kcal)</Label>
-              <Input
-                id="calorieTarget"
-                type="number"
-                value={goals.calorieTarget}
-                onChange={(e) =>
-                  setGoals({ ...goals, calorieTarget: e.target.value })
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="proteinTarget">Protein Target (g)</Label>
-              <Input
-                id="proteinTarget"
-                type="number"
-                value={goals.proteinTarget}
-                onChange={(e) =>
-                  setGoals({ ...goals, proteinTarget: e.target.value })
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="stepsTarget">Steps Target</Label>
-              <Input
-                id="stepsTarget"
-                type="number"
-                value={goals.stepsTarget}
-                onChange={(e) =>
-                  setGoals({ ...goals, stepsTarget: e.target.value })
-                }
-              />
-            </div>
-          </div>
-          <Button onClick={handleSaveGoals} disabled={savingGoals}>
-            {savingGoals ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Saving...
-              </>
-            ) : goalsSaved ? (
-              <>
-                <Check className="h-4 w-4 mr-2" />
-                Saved!
-              </>
-            ) : (
-              "Save Goals"
-            )}
-          </Button>
-        </CardContent>
-      </Card>
+            <Section no="1.2" title="Daily targets" note="what the ledger measures you against">
+              <div className="grid grid-cols-4 gap-x-10">
+                <Field label="Sleep (hours)">
+                  <input
+                    type="number"
+                    className={inputClass}
+                    value={goals.sleepTarget}
+                    onChange={(e) => setGoals({ ...goals, sleepTarget: e.target.value })}
+                  />
+                </Field>
+                <Field label="Calories (kcal)">
+                  <input
+                    type="number"
+                    className={inputClass}
+                    value={goals.calorieTarget}
+                    onChange={(e) => setGoals({ ...goals, calorieTarget: e.target.value })}
+                  />
+                </Field>
+                <Field label="Protein (g)">
+                  <input
+                    type="number"
+                    className={inputClass}
+                    value={goals.proteinTarget}
+                    onChange={(e) => setGoals({ ...goals, proteinTarget: e.target.value })}
+                  />
+                </Field>
+                <Field label="Steps">
+                  <input
+                    type="number"
+                    className={inputClass}
+                    value={goals.stepsTarget}
+                    onChange={(e) => setGoals({ ...goals, stepsTarget: e.target.value })}
+                  />
+                </Field>
+              </div>
+              <ActionButton onClick={handleSaveGoals} disabled={savingGoals}>
+                {savingGoals ? "Saving…" : goalsSaved ? "✓ Saved" : "Save targets"}
+              </ActionButton>
+            </Section>
 
-      {/* Integrations */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Database className="h-5 w-5" />
-            Connected Devices
-          </CardTitle>
-          <CardDescription>Manage your device integrations</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Apple Health Integration */}
-          <AppleHealthIntegration />
+            <Section no="1.3" title="The wire" note="where the numbers come from">
+              <AppleHealthIntegration />
+            </Section>
+          </>
+        )}
 
-          {/* Google Fit - Coming Soon */}
-          <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-100">
-                <Database className="h-5 w-5 text-green-600" />
-              </div>
-              <div>
-                <p className="font-medium">Google Fit</p>
-                <p className="text-sm text-muted-foreground">
-                  Sync health data from Google Fit
-                </p>
-              </div>
-            </div>
-            <Button variant="outline" disabled>
-              Coming Soon
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Notifications */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Bell className="h-5 w-5" />
-            Notifications
-          </CardTitle>
-          <CardDescription>Configure your notification preferences</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Daily Summary</p>
-                <p className="text-sm text-muted-foreground">
-                  Receive a daily health summary
-                </p>
-              </div>
-              <Button variant="outline" size="sm" disabled>
-                Enabled
-              </Button>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Goal Reminders</p>
-                <p className="text-sm text-muted-foreground">
-                  Reminders to log meals and workouts
-                </p>
-              </div>
-              <Button variant="outline" size="sm" disabled>
-                Enabled
-              </Button>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">AI Insights</p>
-                <p className="text-sm text-muted-foreground">
-                  Get notified about important health insights
-                </p>
-              </div>
-              <Button variant="outline" size="sm" disabled>
-                Enabled
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Danger Zone */}
-      <Card className="border-destructive/50">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-destructive">
-            <Shield className="h-5 w-5" />
-            Danger Zone
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium">Export Data</p>
-              <p className="text-sm text-muted-foreground">
-                Download all your health data
-              </p>
-            </div>
-            <Button variant="outline" disabled>
-              Export
-            </Button>
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium text-destructive">Delete Account</p>
-              <p className="text-sm text-muted-foreground">
-                Permanently delete your account and data
-              </p>
-            </div>
-            <Button variant="destructive" disabled>
-              Delete
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+        <footer className="mt-10 flex justify-between border-t border-[var(--lg-ink)] pt-[11px] text-[9px] uppercase tracking-[.26em] text-[var(--lg-mut)]">
+          <span>N = 1 · Every number from your watch or your words</span>
+          <Link href="/" className="hover:text-[var(--lg-ink)]">
+            Back to today
+          </Link>
+        </footer>
+      </main>
     </div>
   );
 }

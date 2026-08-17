@@ -365,8 +365,31 @@ body {
      traces and the axis labels aligned by construction. */
   --lg-cols: 96px 1fr 250px;
 
-  /* #e7e7e3 as the HSL triple the global border reset expects. */
+  /* The app's semantic tokens, restated in Gallery values.
+     Everything under .ledger is a light sheet, but <html> carries .dark, so
+     shadcn components (Input, Button, Label) would otherwise render their dark
+     palette on paper. Redefining the tokens here means those components are
+     correct inside the ledger without a single component edit — and untouched
+     everywhere else. */
+  --background: 60 20% 99%;
+  --foreground: 60 2% 7%;
+  --card: 60 20% 99%;
+  --card-foreground: 60 2% 7%;
+  --popover: 60 20% 99%;
+  --popover-foreground: 60 2% 7%;
+  --primary: 10 67% 51%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 60 9% 97%;
+  --secondary-foreground: 60 2% 7%;
+  --muted: 60 9% 97%;
+  --muted-foreground: 60 3% 53%;
+  --accent: 60 9% 97%;
+  --accent-foreground: 60 2% 7%;
+  --destructive: 10 67% 51%;
+  --destructive-foreground: 0 0% 100%;
   --border: 60 8% 90%;
+  --input: 60 8% 90%;
+  --ring: 10 67% 51%;
 
   color-scheme: light;
   background: var(--lg-paper);
