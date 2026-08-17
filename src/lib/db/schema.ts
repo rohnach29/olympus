@@ -295,6 +295,33 @@ export const webhookLogs = pgTable("webhook_logs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Station Olympus episodes — one row per morning show. Written only by the
+// worker's publish node; the app reads. Audio is pruned after 30 days (blob
+// deleted, audioUrl nulled, status 'expired') but the row itself is forever:
+// the archive keeps its transcripts after the voice is gone.
+export const episodes = pgTable("episodes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  airDate: date("air_date").notNull(), // The morning this episode covers (YYYY-MM-DD)
+  status: text("status").notNull(), // 'published', 'no_audio', 'expired'
+  audioUrl: text("audio_url"), // Vercel Blob URL; null when unpublished or pruned
+  audioDurationS: integer("audio_duration_s"),
+  // Speaker-tagged lines: [{ speaker: 'ANCHOR', text: '...' }]. Tagged even
+  // with one speaker so a second voice is a prompt change, not a migration.
+  transcript: jsonb("transcript").notNull(),
+  // The exact facts JSON the writer saw at press time. The ledger is live and
+  // can be revised by a late sync; this is what was true when the show aired.
+  factsUsed: jsonb("facts_used").notNull(),
+  writerModel: text("writer_model"),
+  ttsModel: text("tts_model"),
+  publishedAt: timestamp("published_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  uniqueEpisode: uniqueIndex("episodes_unique_idx").on(table.userId, table.airDate),
+}));
+
 // Types
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -316,3 +343,5 @@ export type ApiToken = typeof apiTokens.$inferSelect;
 export type NewApiToken = typeof apiTokens.$inferInsert;
 export type WebhookLog = typeof webhookLogs.$inferSelect;
 export type NewWebhookLog = typeof webhookLogs.$inferInsert;
+export type Episode = typeof episodes.$inferSelect;
+export type NewEpisode = typeof episodes.$inferInsert;
