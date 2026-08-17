@@ -10,6 +10,7 @@ import {
   mapSleepToOlympus,
   mapWorkoutToOlympus,
   mergeSleepSegments,
+  applyStoredSegments,
   extractSleepFromMetrics,
   extractTimestamps,
 } from "./mappers";
@@ -116,8 +117,29 @@ export async function processHealthAutoExport(
         .filter((s): s is NonNullable<typeof s> => s !== null)
     );
 
-    for (const mapped of mappedSessions) {
+    for (const incoming of mappedSessions) {
       try {
+        // Fold in whatever is already known about this night, so a night that
+        // arrives in pieces across several syncs ends up whole rather than
+        // being replaced by whichever export happened to be longest.
+        const [existingNight] = await db
+          .select()
+          .from(sleepSessions)
+          .where(
+            and(
+              eq(sleepSessions.userId, userId),
+              eq(sleepSessions.sleepDate, incoming.sleepDate),
+              eq(sleepSessions.source, incoming.source ?? "apple_health")
+            )
+          )
+          .limit(1);
+
+        const mapped = applyStoredSegments(
+          incoming,
+          existingNight?.metadata,
+          existingNight ?? null
+        );
+
         // Calculate sleep score using existing scoring algorithm
         let sleepScore: number | null = null;
 
@@ -164,12 +186,11 @@ export async function processHealthAutoExport(
           console.error("Sleep score calculation failed:", scoreErr);
         }
 
-        // UPSERT, overwriting only when this export describes a longer night.
-        //
-        // Doing nothing on conflict meant the first version of a night was
-        // frozen forever: a later, more complete export could never correct a
-        // partial one. Guarding on total_minutes lets the record heal on the
-        // next sync while a partial re-send can never shorten a good record.
+        // The values already include every segment previously recorded for
+        // this night, so the write is unconditional: replaying an export
+        // reproduces the same totals, and a new stretch adds to them. (The
+        // old "only if longer" guard is gone — under it, a sync carrying the
+        // second half of a broken night was discarded for being shorter.)
         const inserted = await db
           .insert(sleepSessions)
           .values({
@@ -196,7 +217,6 @@ export async function processHealthAutoExport(
               sleepScore,
               metadata: mapped.metadata,
             },
-            setWhere: sql`${sleepSessions.totalMinutes} < ${mapped.totalMinutes}`,
           })
           .returning({ id: sleepSessions.id });
 

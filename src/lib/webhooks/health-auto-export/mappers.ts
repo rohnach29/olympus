@@ -161,14 +161,106 @@ export function mapSleepToOlympus(
 }
 
 /**
+ * One continuous stretch of sleep, as reported by the watch.
+ *
+ * Stored on the session row so an interrupted night can be rebuilt from its
+ * parts no matter how many separate exports they arrive in. `start` is the
+ * identity: re-sending a stretch already counted does not double it.
+ */
+export interface NightSegment {
+  start: string;
+  end: string;
+  asleep: number;
+  inBed: number;
+  deep: number;
+  core: number;
+  rem: number;
+  awake: number;
+  latency: number;
+}
+
+function toSegment(s: NewSleepSession): NightSegment {
+  return {
+    start: s.bedtime.toISOString(),
+    end: s.wakeTime.toISOString(),
+    asleep: s.totalMinutes,
+    inBed: s.inBedMinutes,
+    deep: s.deepSleepMinutes ?? 0,
+    core: s.lightSleepMinutes ?? 0,
+    rem: s.remSleepMinutes ?? 0,
+    awake: s.awakeMinutes ?? 0,
+    latency: s.sleepLatencyMinutes ?? 0,
+  };
+}
+
+/** Read the segments recorded on a stored session, if it has any. */
+export function segmentsOf(metadata: unknown): NightSegment[] {
+  if (typeof metadata !== "object" || metadata === null) return [];
+  const segments = (metadata as { segments?: unknown }).segments;
+  return Array.isArray(segments) ? (segments as NightSegment[]) : [];
+}
+
+/**
+ * Union two sets of segments, keyed on start time.
+ *
+ * Keeping the fuller record for a repeated start lets a later, more complete
+ * export improve a stretch that was first reported mid-sleep, while replaying
+ * the same export any number of times leaves the night unchanged.
+ */
+export function combineSegments(
+  stored: NightSegment[],
+  incoming: NightSegment[]
+): NightSegment[] {
+  const byStart = new Map<string, NightSegment>();
+  for (const seg of [...stored, ...incoming]) {
+    const prev = byStart.get(seg.start);
+    if (!prev || seg.asleep > prev.asleep) byStart.set(seg.start, seg);
+  }
+  return [...byStart.values()].sort((a, b) => a.start.localeCompare(b.start));
+}
+
+/**
+ * Roll a night's segments up into the session figures.
+ *
+ * Durations are summed rather than measured end-to-end, so an hour spent awake
+ * between two stretches is not counted as time in bed.
+ */
+export function totalsFromSegments(segments: NightSegment[]) {
+  const sum = (pick: (s: NightSegment) => number) =>
+    segments.reduce((total, s) => total + pick(s), 0);
+
+  const totalMinutes = sum((s) => s.asleep);
+  const inBedMinutes = sum((s) => s.inBed);
+
+  return {
+    bedtime: new Date(
+      Math.min(...segments.map((s) => new Date(s.start).getTime()))
+    ),
+    wakeTime: new Date(
+      Math.max(...segments.map((s) => new Date(s.end).getTime()))
+    ),
+    totalMinutes,
+    inBedMinutes,
+    deepSleepMinutes: sum((s) => s.deep),
+    lightSleepMinutes: sum((s) => s.core),
+    remSleepMinutes: sum((s) => s.rem),
+    awakeMinutes: sum((s) => s.awake),
+    sleepLatencyMinutes: sum((s) => s.latency),
+    efficiency:
+      inBedMinutes > 0
+        ? ((totalMinutes / inBedMinutes) * 100).toFixed(1)
+        : null,
+  };
+}
+
+/**
  * Combine the segments of one night into a single sleep session.
  *
  * An interrupted night arrives from Health Auto Export as several sleep
  * entries. The database holds one row per (user, night, source), so inserting
- * them one at a time meant the first segment won and the rest were dropped —
- * a night recorded as ending at 03:34 when the sleeper actually got up at
- * 06:34. Durations are summed rather than measured across the whole span, so
- * a two-hour gap in the middle of the night is not counted as time in bed.
+ * them one at a time meant the first stretch won and the rest were dropped.
+ * The segment list travels with the row so the same union can be applied again
+ * when the remaining stretches arrive in a later export.
  */
 export function mergeSleepSegments(
   sessions: NewSleepSession[]
@@ -181,44 +273,51 @@ export function mergeSleepSegments(
     else byNight.set(key, [s]);
   }
 
-  return [...byNight.values()].map((segments) => {
-    if (segments.length === 1) return segments[0];
-
-    const sum = (pick: (s: NewSleepSession) => number | null | undefined) =>
-      segments.reduce((total, s) => total + (pick(s) ?? 0), 0);
-
-    const bedtime = new Date(
-      Math.min(...segments.map((s) => s.bedtime.getTime()))
-    );
-    const wakeTime = new Date(
-      Math.max(...segments.map((s) => s.wakeTime.getTime()))
-    );
-    const totalMinutes = sum((s) => s.totalMinutes);
-    const inBedMinutes = sum((s) => s.inBedMinutes);
-
+  return [...byNight.values()].map((parts) => {
+    const segments = combineSegments([], parts.map(toSegment));
+    const base = parts[0];
     return {
-      ...segments[0],
-      bedtime,
-      wakeTime,
-      totalMinutes,
-      inBedMinutes,
-      deepSleepMinutes: sum((s) => s.deepSleepMinutes),
-      remSleepMinutes: sum((s) => s.remSleepMinutes),
-      lightSleepMinutes: sum((s) => s.lightSleepMinutes),
-      awakeMinutes: sum((s) => s.awakeMinutes),
-      sleepLatencyMinutes: sum((s) => s.sleepLatencyMinutes),
-      efficiency:
-        inBedMinutes > 0
-          ? ((totalMinutes / inBedMinutes) * 100).toFixed(1)
-          : null,
+      ...base,
+      ...totalsFromSegments(segments),
       metadata: {
-        ...(typeof segments[0].metadata === "object" && segments[0].metadata !== null
-          ? segments[0].metadata
+        ...(typeof base.metadata === "object" && base.metadata !== null
+          ? base.metadata
           : {}),
-        segments: segments.length,
+        segments,
       },
     };
   });
+}
+
+/** Rebuild a session from everything known about the night so far. */
+export function applyStoredSegments(
+  incoming: NewSleepSession,
+  storedMetadata: unknown,
+  storedFallback: NewSleepSession | null
+): NewSleepSession {
+  const stored = segmentsOf(storedMetadata);
+  // A row written before segments were recorded still has to be honoured, or
+  // a later partial export would shorten a night we already had in full.
+  const storedSegments =
+    stored.length > 0
+      ? stored
+      : storedFallback
+        ? [toSegment(storedFallback)]
+        : [];
+
+  const segments = combineSegments(storedSegments, segmentsOf(incoming.metadata));
+  if (segments.length === 0) return incoming;
+
+  return {
+    ...incoming,
+    ...totalsFromSegments(segments),
+    metadata: {
+      ...(typeof incoming.metadata === "object" && incoming.metadata !== null
+        ? incoming.metadata
+        : {}),
+      segments,
+    },
+  };
 }
 
 /**
