@@ -335,3 +335,64 @@ body {
     radial-gradient(ellipse at 80% 50%, hsl(var(--health-purple) / 0.06) 0%, transparent 50%),
     hsl(var(--card) / 0.5);
 }
+
+/* ============================================================
+   The Ledger × The Score — "Gallery" edition
+   ============================================================
+   Deliberately self-contained: nothing in here reads --background,
+   --foreground, --border or any @theme token, because those flip with
+   .dark on <html> AND with the prefers-color-scheme block above. The
+   ledger is a light sheet living inside a dark app, so it carries its
+   own palette and never inherits one. */
+
+.ledger {
+  --lg-paper: #fdfdfc;
+  --lg-ink: #131312;
+  --lg-mut: #8a8a86;
+  --lg-rule: #e7e7e3;
+  --lg-acc: #d64a2e;
+  --lg-g2: #6b6b66;
+  --lg-g3: #d3d3cd;
+  --lg-chipbg: #f7f7f5;
+  --lg-chiptx: #4d4d49;
+  --lg-up: #2c6e3f;
+
+  --lg-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --lg-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* One declaration of the ledger-line geometry. The tracks grid and the
+     time axis both consume it, which is what keeps the now-line, the
+     traces and the axis labels aligned by construction. */
+  --lg-cols: 96px 1fr 250px;
+
+  color-scheme: light;
+  background: var(--lg-paper);
+  color: var(--lg-ink);
+  font-family: var(--lg-sans);
+  font-variant-numeric: tabular-nums;
+  min-height: 100dvh;
+  padding: 44px 64px 34px;
+}
+
+/* globals.css sets `* { border-color: hsl(var(--border)) }` with dark values.
+   Any ledger element written as `border-t` would silently inherit it, so the
+   default is re-pointed at the Gallery hairline inside the sheet. */
+.ledger,
+.ledger * {
+  border-color: var(--lg-rule);
+}
+
+/* The wrapper cannot paint the overscroll area or the scrollbar, so the
+   body follows the sheet whenever one is on screen. */
+body:has(.ledger) {
+  background: var(--lg-paper);
+  color-scheme: light;
+}
+
+/* Letterspaced uppercase label — the ledger's small-caps voice. */
+.ledger-k {
+  font-size: 9.5px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--lg-mut);
+}
