@@ -105,13 +105,20 @@ export function mapSleepToOlympus(
     return Math.round(value);
   };
 
-  // Calculate time in bed from timestamps (this is always accurate)
+  // Time in bed: trust whichever figure is larger.
+  //
+  // sleepStart/sleepEnd bracket the *asleep* period, so the span between them
+  // omits the time spent in bed awake at either end — Apple's own inBed figure
+  // includes it. Taking the max keeps the larger, more complete number whether
+  // or not the export carried an explicit inBed value, instead of silently
+  // reporting a shorter night than the watch does.
   const inBedMinutesFromTimestamps = Math.round(
     (wakeTime.getTime() - bedtime.getTime()) / (1000 * 60)
   );
-
-  // Use timestamp-based calculation as primary, fall back to provided value
-  const inBedMinutes = inBedMinutesFromTimestamps || hoursToMinutes(sleepData.inBed);
+  const inBedMinutes = Math.max(
+    inBedMinutesFromTimestamps,
+    hoursToMinutes(sleepData.inBed)
+  );
 
   // Convert sleep stage durations from hours to minutes
   const deepSleepMinutes = hoursToMinutes(sleepData.deep);
@@ -151,6 +158,67 @@ export function mapSleepToOlympus(
       importedAt: new Date().toISOString(),
     },
   };
+}
+
+/**
+ * Combine the segments of one night into a single sleep session.
+ *
+ * An interrupted night arrives from Health Auto Export as several sleep
+ * entries. The database holds one row per (user, night, source), so inserting
+ * them one at a time meant the first segment won and the rest were dropped —
+ * a night recorded as ending at 03:34 when the sleeper actually got up at
+ * 06:34. Durations are summed rather than measured across the whole span, so
+ * a two-hour gap in the middle of the night is not counted as time in bed.
+ */
+export function mergeSleepSegments(
+  sessions: NewSleepSession[]
+): NewSleepSession[] {
+  const byNight = new Map<string, NewSleepSession[]>();
+  for (const s of sessions) {
+    const key = `${s.sleepDate}|${s.source ?? "unknown"}`;
+    const bucket = byNight.get(key);
+    if (bucket) bucket.push(s);
+    else byNight.set(key, [s]);
+  }
+
+  return [...byNight.values()].map((segments) => {
+    if (segments.length === 1) return segments[0];
+
+    const sum = (pick: (s: NewSleepSession) => number | null | undefined) =>
+      segments.reduce((total, s) => total + (pick(s) ?? 0), 0);
+
+    const bedtime = new Date(
+      Math.min(...segments.map((s) => s.bedtime.getTime()))
+    );
+    const wakeTime = new Date(
+      Math.max(...segments.map((s) => s.wakeTime.getTime()))
+    );
+    const totalMinutes = sum((s) => s.totalMinutes);
+    const inBedMinutes = sum((s) => s.inBedMinutes);
+
+    return {
+      ...segments[0],
+      bedtime,
+      wakeTime,
+      totalMinutes,
+      inBedMinutes,
+      deepSleepMinutes: sum((s) => s.deepSleepMinutes),
+      remSleepMinutes: sum((s) => s.remSleepMinutes),
+      lightSleepMinutes: sum((s) => s.lightSleepMinutes),
+      awakeMinutes: sum((s) => s.awakeMinutes),
+      sleepLatencyMinutes: sum((s) => s.sleepLatencyMinutes),
+      efficiency:
+        inBedMinutes > 0
+          ? ((totalMinutes / inBedMinutes) * 100).toFixed(1)
+          : null,
+      metadata: {
+        ...(typeof segments[0].metadata === "object" && segments[0].metadata !== null
+          ? segments[0].metadata
+          : {}),
+        segments: segments.length,
+      },
+    };
+  });
 }
 
 /**

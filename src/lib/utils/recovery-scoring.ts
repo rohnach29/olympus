@@ -78,6 +78,14 @@ export interface RecoveryResult {
   recommendation: string;
   trainingRecommendation: string;
   hasEnoughData: boolean;
+  /**
+   * Sum of the weights of the components that actually had data, 0–1.
+   * 1 means a fully informed verdict; 0.4 means it was computed from
+   * well under half the picture and should be presented as such.
+   */
+  confidence: number;
+  /** Human names of the components the score was computed from. */
+  basis: string[];
 }
 
 // ============================================================================
@@ -532,16 +540,34 @@ export function calculateRecovery(inputs: RecoveryInputs): RecoveryResult {
     sleepConsistency: { score: sleepConsistencyResult.score, weight: RECOVERY_WEIGHTS.sleepConsistency, hasData: sleepConsistencyResult.hasData },
   };
 
-  // Check if ALL factors have data - require complete data for recovery score
-  const allFactorsHaveData =
-    sleepQualityResult.hasData &&
-    hrvResult.hasData &&
-    restingHrResult.hasData &&
-    strainImpactResult.hasData &&
-    sleepConsistencyResult.hasData;
+  // Score from whatever is measurable, and say how much that was.
+  //
+  // Requiring all five components sounds rigorous but is the opposite: a watch
+  // that reports HRV but no sleep stages, or a night without the watch, made
+  // the score permanently null — so the number was never shown at all. A
+  // weighted mean over the present components, renormalised by their weights,
+  // is the same arithmetic when everything is present and degrades honestly
+  // when it isn't. `confidence` travels with the score so the UI can qualify it.
+  const weighted = [
+    { name: "sleep quality", result: sleepQualityResult, weight: RECOVERY_WEIGHTS.sleepQuality },
+    { name: "HRV", result: hrvResult, weight: RECOVERY_WEIGHTS.hrvStatus },
+    { name: "resting heart rate", result: restingHrResult, weight: RECOVERY_WEIGHTS.restingHrStatus },
+    { name: "prior strain", result: strainImpactResult, weight: RECOVERY_WEIGHTS.strainImpact },
+    { name: "sleep consistency", result: sleepConsistencyResult, weight: RECOVERY_WEIGHTS.sleepConsistency },
+  ];
 
-  // If ANY factor is missing data, we can't calculate a meaningful recovery score
-  if (!allFactorsHaveData) {
+  const present = weighted.filter((e) => e.result.hasData && e.result.score !== null);
+  const confidence = Math.round(present.reduce((sum, e) => sum + e.weight, 0) * 100) / 100;
+  const basis = present.map((e) => e.name);
+
+  // Two gates, not one. Strain always reports hasData (a rest day is real data),
+  // so weight alone would let "no workouts logged" masquerade as evidence about
+  // the body. A verdict needs at least one physiological signal behind it.
+  const MIN_CONFIDENCE = 0.4;
+  const hasPhysiologicalSignal =
+    sleepQualityResult.hasData || hrvResult.hasData || restingHrResult.hasData;
+
+  if (confidence < MIN_CONFIDENCE || !hasPhysiologicalSignal) {
     return {
       recoveryScore: null,
       category: "insufficient_data",
@@ -549,16 +575,13 @@ export function calculateRecovery(inputs: RecoveryInputs): RecoveryResult {
       recommendation: "There is not enough data to calculate the recovery score.",
       trainingRecommendation: "Wear your device tonight to track sleep, HRV, and heart rate.",
       hasEnoughData: false,
+      confidence,
+      basis,
     };
   }
 
-  // All factors have data - calculate weighted total
   const recoveryScore = Math.round(
-    sleepQualityResult.score! * RECOVERY_WEIGHTS.sleepQuality +
-    hrvResult.score! * RECOVERY_WEIGHTS.hrvStatus +
-    restingHrResult.score! * RECOVERY_WEIGHTS.restingHrStatus +
-    strainImpactResult.score! * RECOVERY_WEIGHTS.strainImpact +
-    sleepConsistencyResult.score! * RECOVERY_WEIGHTS.sleepConsistency
+    present.reduce((sum, e) => sum + e.result.score! * e.weight, 0) / confidence
   );
 
   // Determine category (recoveryScore is guaranteed to be a number here)
@@ -592,6 +615,8 @@ export function calculateRecovery(inputs: RecoveryInputs): RecoveryResult {
     recommendation: recommendations[category],
     trainingRecommendation: trainingRecs[category],
     hasEnoughData: true,
+    confidence,
+    basis,
   };
 }
 

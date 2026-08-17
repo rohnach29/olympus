@@ -9,6 +9,7 @@ import {
   mapMetricToOlympus,
   mapSleepToOlympus,
   mapWorkoutToOlympus,
+  mergeSleepSegments,
   extractSleepFromMetrics,
   extractTimestamps,
 } from "./mappers";
@@ -105,15 +106,18 @@ export async function processHealthAutoExport(
     }
 
     // 2. Process sleep data
+    // Segments of the same night are merged before they reach the database —
+    // one row per night, so an interrupted night isn't truncated to its first
+    // stretch. See mergeSleepSegments.
     const sleepDataArray = extractSleepFromMetrics(metricsArray);
-    for (const sleepData of sleepDataArray) {
+    const mappedSessions = mergeSleepSegments(
+      sleepDataArray
+        .map((sleepData) => mapSleepToOlympus(userId, sleepData))
+        .filter((s): s is NonNullable<typeof s> => s !== null)
+    );
+
+    for (const mapped of mappedSessions) {
       try {
-        const mapped = mapSleepToOlympus(userId, sleepData);
-
-        if (!mapped) {
-          continue; // Skip invalid sleep data
-        }
-
         // Calculate sleep score using existing scoring algorithm
         let sleepScore: number | null = null;
 
@@ -160,15 +164,40 @@ export async function processHealthAutoExport(
           console.error("Sleep score calculation failed:", scoreErr);
         }
 
-        // UPSERT: Insert if not exists, do nothing if duplicate
-        // The unique constraint (userId, sleepDate, source) prevents duplicates
+        // UPSERT, overwriting only when this export describes a longer night.
+        //
+        // Doing nothing on conflict meant the first version of a night was
+        // frozen forever: a later, more complete export could never correct a
+        // partial one. Guarding on total_minutes lets the record heal on the
+        // next sync while a partial re-send can never shorten a good record.
         const inserted = await db
           .insert(sleepSessions)
           .values({
             ...mapped,
             sleepScore,
           })
-          .onConflictDoNothing()
+          .onConflictDoUpdate({
+            target: [
+              sleepSessions.userId,
+              sleepSessions.sleepDate,
+              sleepSessions.source,
+            ],
+            set: {
+              bedtime: mapped.bedtime,
+              wakeTime: mapped.wakeTime,
+              totalMinutes: mapped.totalMinutes,
+              inBedMinutes: mapped.inBedMinutes,
+              deepSleepMinutes: mapped.deepSleepMinutes,
+              remSleepMinutes: mapped.remSleepMinutes,
+              lightSleepMinutes: mapped.lightSleepMinutes,
+              awakeMinutes: mapped.awakeMinutes,
+              sleepLatencyMinutes: mapped.sleepLatencyMinutes,
+              efficiency: mapped.efficiency,
+              sleepScore,
+              metadata: mapped.metadata,
+            },
+            setWhere: sql`${sleepSessions.totalMinutes} < ${mapped.totalMinutes}`,
+          })
           .returning({ id: sleepSessions.id });
 
         if (inserted.length > 0) {
