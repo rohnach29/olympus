@@ -143,6 +143,7 @@ describe("buildSleepTrack", () => {
     bedtime: at(bedH),
     wakeTime: at(wakeH),
     totalMinutes: 306,
+    inBedMinutes: 348,
     deepSleepMinutes: 39,
     remSleepMinutes: 89,
     lightSleepMinutes: 178,
@@ -150,6 +151,14 @@ describe("buildSleepTrack", () => {
     efficiency: "87.9",
     sleepScore: 46,
     ...over,
+  });
+
+  it("exposes stages that add up to the total the row prints", () => {
+    // The figures column is only checkable if the parts reconcile with the
+    // headline; omitting core sleep once made the row look wrong.
+    const t = buildSleepTrack(night(0.77, 6.57), DAY_START, IST);
+    expect(t.deepMin + t.coreMin + t.remMin).toBe(t.totalMin);
+    expect(t.inBedMin).toBeGreaterThanOrEqual(t.totalMin);
   });
 
   it("lays the night out across the morning", () => {

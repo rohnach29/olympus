@@ -53,8 +53,12 @@ export interface SleepTrack {
   segments: TraceSegment[];
   bedtime: string;
   wake: string;
+  /** Minutes asleep. deepMin + coreMin + remMin add up to this. */
   totalMin: number;
+  /** Minutes between lights-out and getting up: totalMin plus time awake. */
+  inBedMin: number;
   deepMin: number;
+  coreMin: number;
   remMin: number;
   efficiency: number | null;
   score: number | null;

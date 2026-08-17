@@ -17,6 +17,11 @@ function pct(t: number): number {
   return (Math.min(Math.max(t, 0), 24) / 24) * 100;
 }
 
+/** Minutes as h:mm. */
+function hhmm(min: number): string {
+  return `${Math.floor(min / 60)}:${String(Math.round(min % 60)).padStart(2, "0")}`;
+}
+
 const STAGE_FILL: Record<SleepTrack["segments"][number]["stage"], string> = {
   deep: "var(--lg-ink)",
   core: "var(--lg-g3)",
@@ -106,11 +111,17 @@ export function SleepTrace({ track }: { track: SleepTrack }) {
         </span>
       )}
 
+      {/* The window and the time in bed are both named, so the gap between
+          "00:46 — 06:34" and the hours actually slept is visible rather than
+          left as an unexplained discrepancy. */}
       <span
         className="absolute whitespace-nowrap font-[family-name:var(--lg-mono)] text-[10px] text-[var(--lg-mut)]"
         style={{ left: `calc(${pct(last?.to ?? 8)}% + 10px)`, top: 12 }}
       >
-        {track.bedtime} — {track.wake}
+        {track.bedtime} — {track.wake} · {hhmm(track.inBedMin)} in bed
+        {track.efficiency !== null
+          ? ` · ${Math.round(track.efficiency)}% asleep`
+          : ""}
         {track.score !== null ? ` · score ${track.score}` : ""}
       </span>
     </div>

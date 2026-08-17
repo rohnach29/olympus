@@ -211,6 +211,7 @@ export function buildSleepTrack(
     bedtime: Date;
     wakeTime: Date;
     totalMinutes: number;
+    inBedMinutes: number;
     deepSleepMinutes: number | null;
     remSleepMinutes: number | null;
     lightSleepMinutes: number | null;
@@ -253,7 +254,9 @@ export function buildSleepTrack(
     bedtime: localHHMM(session.bedtime, tz),
     wake: localHHMM(session.wakeTime, tz),
     totalMin: session.totalMinutes,
+    inBedMin: session.inBedMinutes,
     deepMin: session.deepSleepMinutes ?? 0,
+    coreMin: session.lightSleepMinutes ?? 0,
     remMin: session.remSleepMinutes ?? 0,
     efficiency: session.efficiency === null ? null : Number(session.efficiency),
     score: session.sleepScore,

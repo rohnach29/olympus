@@ -104,15 +104,14 @@ export function LedgerSheet({
           unprinted="UNPRINTED — NO SLEEP RECORDED"
           figure={tracks.sleep && hhmm(tracks.sleep.totalMin)}
           detail={
+            // All three stages are shown because they add up to the headline
+            // figure. Printing only deep and REM left most of the night
+            // unaccounted for, so the row could not be checked.
             tracks.sleep && (
               <>
-                deep <Strong>{hhmm(tracks.sleep.deepMin)}</Strong> · rem{" "}
+                deep <Strong>{hhmm(tracks.sleep.deepMin)}</Strong> · core{" "}
+                <Strong>{hhmm(tracks.sleep.coreMin)}</Strong> · rem{" "}
                 <Strong>{hhmm(tracks.sleep.remMin)}</Strong>
-                {tracks.sleep.efficiency !== null && (
-                  <>
-                    {" · "}effic <Strong>{Math.round(tracks.sleep.efficiency)}%</Strong>
-                  </>
-                )}
               </>
             )
           }
