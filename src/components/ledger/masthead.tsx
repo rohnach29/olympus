@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Clock } from "./clock";
 import type { DayLedger } from "@/lib/ledger/types";
 
-type Room = "today" | "almanac" | "blood" | "none";
+type Room = "today" | "station" | "almanac" | "blood" | "none";
 
 function shortDate(dateStr: string): string {
   return dateStr.slice(5).replace("-", ".");
@@ -75,6 +75,8 @@ export function Masthead({
 
         <span className="flex gap-2">
           {navLink("/", "TODAY", room === "today")}
+          <span className="text-[var(--lg-g3)]">·</span>
+          {navLink("/station", "STATION", room === "station")}
           <span className="text-[var(--lg-g3)]">·</span>
           {navLink("/history", "ALMANAC", room === "almanac")}
           <span className="text-[var(--lg-g3)]">·</span>

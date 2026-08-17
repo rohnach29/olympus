@@ -126,6 +126,10 @@ export default async function HistoryPage({
                 TODAY
               </Link>
               <span className="text-[var(--lg-g3)]">·</span>
+              <Link href="/station" className="text-[var(--lg-mut)] hover:text-[var(--lg-ink)]">
+                STATION
+              </Link>
+              <span className="text-[var(--lg-g3)]">·</span>
               <span className="font-bold text-[var(--lg-acc)]">ALMANAC</span>
               <span className="text-[var(--lg-g3)]">·</span>
               <Link
