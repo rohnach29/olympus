@@ -1,28 +1,20 @@
-import { Sidebar } from "@/components/dashboard/sidebar";
-import { Header } from "@/components/dashboard/header";
 import { getCurrentUser } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
 
+/**
+ * Authentication gate only.
+ *
+ * Deliberately carries no styling: the ledger pages are a light sheet and
+ * blood work is still the dark UI, so each page paints its own ground rather
+ * than inheriting one from here.
+ */
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const user = await getCurrentUser();
+  if (!user) redirect("/login");
 
-  if (!user) {
-    redirect("/login");
-  }
-
-  const userName = user.fullName || user.email.split("@")[0] || "User";
-
-  return (
-    <div className="min-h-screen bg-background">
-      <Sidebar />
-      <div className="pl-64">
-        <Header userName={userName} />
-        <main className="p-6">{children}</main>
-      </div>
-    </div>
-  );
+  return <>{children}</>;
 }

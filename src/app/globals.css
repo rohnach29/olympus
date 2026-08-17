@@ -365,6 +365,9 @@ body {
      traces and the axis labels aligned by construction. */
   --lg-cols: 96px 1fr 250px;
 
+  /* #e7e7e3 as the HSL triple the global border reset expects. */
+  --border: 60 8% 90%;
+
   color-scheme: light;
   background: var(--lg-paper);
   color: var(--lg-ink);
@@ -374,13 +377,12 @@ body {
   padding: 44px 64px 34px;
 }
 
-/* globals.css sets `* { border-color: hsl(var(--border)) }` with dark values.
-   Any ledger element written as `border-t` would silently inherit it, so the
-   default is re-pointed at the Gallery hairline inside the sheet. */
-.ledger,
-.ledger * {
-  border-color: var(--lg-rule);
-}
+/* This file's `* { border-color: hsl(var(--border)) }` reset carries dark
+   values, so a ledger element written as a bare `border-t` would inherit one.
+   Rather than override border-color on every descendant — which would also
+   beat any Tailwind border utility used inside the sheet — the token itself is
+   redefined here. The reset then paints the Gallery hairline by default, and a
+   utility class still wins, because `*` has no specificity. */
 
 /* The wrapper cannot paint the overscroll area or the scrollbar, so the
    body follows the sheet whenever one is on screen. */
