@@ -21,11 +21,12 @@ on:
         type: boolean
         default: false
 
-  # 23:00 UTC is 04:30 in Asia/Kolkata — the show is finished before the alarm.
-  # Note this is already *tomorrow* where the listener sleeps, which is why the
-  # worker resolves the date in STATION_TZ rather than from UTC.
+  # 05:30 UTC is 11:00 in Asia/Kolkata. Late enough that the watch has finished
+  # uploading the night and the whole of the day before, so the show is written
+  # from settled numbers rather than a half-synced night. GitHub's scheduler
+  # drifts by several minutes under load; nothing here depends on the minute.
   schedule:
-    - cron: "0 23 * * *"
+    - cron: "30 5 * * *"
 
 concurrency:
   # Two press runs for the same morning would fight over the same episode row.
