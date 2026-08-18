@@ -23,9 +23,18 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env.local")
 WRITER_MODEL = os.getenv("STATION_WRITER_MODEL", "gemini-3.7-flash")
 WRITER_FALLBACK_MODEL = os.getenv("STATION_WRITER_FALLBACK_MODEL", "gemini-3.6-flash")
 
-# Pinned per episode. "Charon" is a *different voice* on 3.1 than on 2.5, so a
-# mid-show fallback would change the anchor between two sentences. Whichever
-# model the first chunk used is the model every chunk uses.
+# The anchor: a Fish Audio voice reading the whole show in one take. The voice
+# id is the Seth Meyers clone picked in the 2026-08-18 audition (private,
+# single-listener use); the free tier's fair-use limits comfortably cover one
+# ninety-second episode a day.
+FISH_API = "https://api.fish.audio"
+FISH_TTS_MODEL = os.getenv("STATION_FISH_MODEL", "s2.1-pro-free")
+FISH_VOICE_ID = os.getenv("STATION_FISH_VOICE", "b14fde3acde74506b67fc7b8a7dedba7")
+
+# The understudy. If Fish is down for the morning, the show falls back to the
+# original Gemini chunked pipeline. Pinned per episode: "Charon" is a
+# *different voice* on 3.1 than on 2.5, so a mid-show fallback would change
+# the anchor between two sentences.
 TTS_MODEL = os.getenv("STATION_TTS_MODEL", "gemini-3.1-flash-tts-preview")
 TTS_VOICE = os.getenv("STATION_TTS_VOICE", "Charon")
 
@@ -33,9 +42,11 @@ GEMINI_API = "https://generativelanguage.googleapis.com/v1beta/models"
 
 # --- synthesis --------------------------------------------------------------
 
-# Long single-shot takes drift muffled and nasal — Google documents it, and we
-# heard it at 97 seconds. Chunking at paragraph boundaries keeps every take
-# inside the clean zone and stitches them back together.
+# Fish reads the whole show in one take; these govern the Gemini fallback,
+# where long single-shot takes drift muffled and nasal — Google documents it,
+# and we heard it at 97 seconds. Chunking at paragraph boundaries keeps every
+# fallback take inside the clean zone. MAX_CHUNK_CHARS also still shapes the
+# transcript's B-side segments on every engine.
 MAX_CHUNK_CHARS = 600
 CHUNK_GAP_MS = 350
 PCM_SAMPLE_RATE = 24_000
@@ -78,6 +89,10 @@ def station_secret() -> str:
 
 def gemini_key() -> str:
     return require("GEMINI_API_KEY")
+
+
+def fish_key() -> str:
+    return require("FISH_AUDIO_API_KEY")
 
 
 def checkpoint_dsn() -> str | None:

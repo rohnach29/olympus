@@ -32,8 +32,11 @@ function listeningTotal(seconds: number): string {
     : `${m}:${String(s).padStart(2, "0")}`;
 }
 
-/** "gemini-3.1-flash-tts-preview" → the credit that fits on a record label. */
+/** "fish/s2.1-pro-free" → the credit that fits on a record label. */
 function voiceCredit(ttsModel: string | null): string {
+  // The station's current anchor: a Fish Audio voice, credited in-universe.
+  if (ttsModel?.startsWith("fish/")) return "THE ANCHOR · S2.1";
+  // The back catalogue was pressed with Gemini's Charon.
   if (ttsModel?.includes("3.1")) return "CHARON 3.1";
   if (ttsModel?.includes("2.5")) return "CHARON 2.5";
   return "CHARON";

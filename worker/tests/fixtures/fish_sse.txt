@@ -1,0 +1,18 @@
+event: message
+data: {"audio_base64": "AAAAAAAA", "content": "Good morning, this is Station Olympus.  Recovery stands at seventy-eight.\n\n More after the break.", "alignment": {"segments": [{"text": "Good", "start": 0.0, "end": 0.16}], "audio_duration": 0.46439909297052157}, "chunk_seq": 0, "chunk_audio_offset_sec": 0.0}
+
+event: message
+data: {"audio_base64": "AAAAAAAA", "content": "Good morning, this is Station Olympus.  Recovery stands at seventy-eight.\n\n More after the break.", "alignment": {"segments": [{"text": "Good", "start": 0.0, "end": 0.16}, {"text": "morning", "start": 0.16, "end": 0.56}], "audio_duration": 0.9287981859410431}, "chunk_seq": 0, "chunk_audio_offset_sec": 0.0}
+
+event: message
+data: {"audio_base64": "AAAAAAAA", "content": "Good morning, this is Station Olympus.  Recovery stands at seventy-eight.\n\n More after the break.", "alignment": {"segments": [{"text": "Good", "start": 0.0, "end": 0.16}, {"text": "morning", "start": 0.16, "end": 0.56}, {"text": "this", "start": 0.56, "end": 0.72}, {"text": "is", "start": 0.8, "end": 0.88}, {"text": "Station", "start": 0.88, "end": 1.28}], "audio_duration": 1.486077097505669}, "chunk_seq": 0, "chunk_audio_offset_sec": 0.0}
+
+event: message
+data: {"audio_base64": "AAAAAAAA", "content": "Good morning, this is Station Olympus.  Recovery stands at seventy-eight.\n\n More after the break.", "alignment": {"segments": [{"text": "Good", "start": 0.0, "end": 0.16}, {"text": "morning", "start": 0.16, "end": 0.56}, {"text": "this", "start": 0.56, "end": 0.72}, {"text": "is", "start": 0.8, "end": 0.88}, {"text": "Station", "start": 0.88, "end": 1.28}, {"text": "Olympus", "start": 1.28, "end": 1.92}, {"text": "Recovery", "start": 2.0, "end": 2.56}], "audio_duration": 2.972154195011338}, "chunk_seq": 0, "chunk_audio_offset_sec": 0.0}
+
+event: message
+data: {"audio_base64": "AAAAAAAA", "content": "Good morning, this is Station Olympus.  Recovery stands at seventy-eight.\n\n More after the break.", "alignment": {"segments": [{"text": "Good", "start": 0.0, "end": 0.16}, {"text": "morning", "start": 0.16, "end": 0.56}, {"text": "this", "start": 0.56, "end": 0.72}, {"text": "is", "start": 0.8, "end": 0.88}, {"text": "Station", "start": 0.88, "end": 1.28}, {"text": "Olympus", "start": 1.28, "end": 1.92}, {"text": "Recovery", "start": 2.0, "end": 2.56}, {"text": "stands", "start": 2.56, "end": 2.88}, {"text": "at", "start": 2.88, "end": 3.04}, {"text": "seventyeight", "start": 3.04, "end": 3.76}, {"text": "More", "start": 4.0, "end": 4.32}, {"text": "after", "start": 4.32, "end": 4.64}, {"text": "the", "start": 4.64, "end": 4.72}], "audio_duration": 5.061950113378685}, "chunk_seq": 0, "chunk_audio_offset_sec": 0.0}
+
+event: message
+data: {"audio_base64": "", "content": "Good morning, this is Station Olympus.  Recovery stands at seventy-eight.\n\n More after the break.", "alignment": {"segments": [{"text": "Good", "start": 0.0, "end": 0.16}, {"text": "morning", "start": 0.16, "end": 0.56}, {"text": "this", "start": 0.56, "end": 0.8}, {"text": "is", "start": 0.8, "end": 0.88}, {"text": "Station", "start": 0.88, "end": 1.28}, {"text": "Olympus", "start": 1.28, "end": 1.92}, {"text": "Recovery", "start": 2.0, "end": 2.56}, {"text": "stands", "start": 2.56, "end": 2.88}, {"text": "at", "start": 2.88, "end": 3.04}, {"text": "seventyeight", "start": 3.04, "end": 3.76}, {"text": "More", "start": 4.0, "end": 4.32}, {"text": "after", "start": 4.32, "end": 4.64}, {"text": "the", "start": 4.64, "end": 4.72}, {"text": "break", "start": 4.72, "end": 4.88}], "audio_duration": 5.061950113378685}, "chunk_seq": 0, "chunk_audio_offset_sec": 0.0}
+

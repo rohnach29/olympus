@@ -30,6 +30,7 @@ from . import config
 from .nodes.check import check_node, degrade_node
 from .nodes.gather import fetch_facts, make_gather_node
 from .nodes.publish import make_publish_node, post_episode
+from .nodes.fish import synthesize_show
 from .nodes.tts import make_tts_node, synthesize_chunk
 from .nodes.write import draft_script, make_write_node
 from .state import DeskState
@@ -56,6 +57,7 @@ def build_graph(
     *,
     fetcher=fetch_facts,
     drafter=draft_script,
+    fish_synthesizer=synthesize_show,
     synthesizer=synthesize_chunk,
     poster=post_episode,
     with_audio: bool = True,
@@ -75,7 +77,10 @@ def build_graph(
     builder.add_node("write", make_write_node(drafter))
     builder.add_node("check", check_node)
     builder.add_node("degrade", degrade_node)
-    builder.add_node("tts", make_tts_node(synthesizer, with_audio=with_audio))
+    builder.add_node(
+        "tts",
+        make_tts_node(synthesizer, fish_synth=fish_synthesizer, with_audio=with_audio),
+    )
     builder.add_node("publish", make_publish_node(poster, dry_run=dry_run))
 
     builder.add_edge(START, "gather")

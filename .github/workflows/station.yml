@@ -56,11 +56,12 @@ jobs:
           STATION_API_URL: ${{ secrets.STATION_API_URL }}
           STATION_SECRET: ${{ secrets.STATION_SECRET }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FISH_AUDIO_API_KEY: ${{ secrets.FISH_AUDIO_API_KEY }}
           DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
         run: |
           # Presence only — values are never printed.
           ok=1
-          for name in STATION_API_URL STATION_SECRET GEMINI_API_KEY DIRECT_DATABASE_URL; do
+          for name in STATION_API_URL STATION_SECRET GEMINI_API_KEY FISH_AUDIO_API_KEY DIRECT_DATABASE_URL; do
             if [ -n "${!name}" ]; then
               echo "✓ $name is set (${#name} chars name, $(eval "echo \${#$name}") chars value)"
             else
@@ -80,6 +81,7 @@ jobs:
           STATION_API_URL: ${{ secrets.STATION_API_URL }}
           STATION_SECRET: ${{ secrets.STATION_SECRET }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FISH_AUDIO_API_KEY: ${{ secrets.FISH_AUDIO_API_KEY }}
           DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
           STATION_TZ: ${{ vars.STATION_TZ || 'Asia/Kolkata' }}
           STATION_TTS_MODEL: ${{ vars.STATION_TTS_MODEL || 'gemini-3.1-flash-tts-preview' }}

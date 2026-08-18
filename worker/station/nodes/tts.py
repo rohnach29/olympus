@@ -1,13 +1,18 @@
 """
 Giving the show its voice.
 
-Everything here is the shape of one hard-won finding: a single long take
-degrades. Past about a minute the voice drifts muffled and nasal on every
-Gemini TTS model — Google documents it, and we heard it clearly at
-ninety-seven seconds. So the script is cut at its paragraph seams,
-synthesized a piece at a time, and stitched back together with a breath
-between. Each piece starts fresh at full clarity, and the seams fall exactly
-where a news anchor would pause anyway.
+The booth has two engines. **Fish Audio reads the whole show in one take**
+(`fish.py`) — no seams, tags performed, timestamps for the B-side. When Fish
+is down, the show falls back to the original **Gemini chunked pipeline**,
+whose machinery lives here; and when both engines fail, the transcript is
+published alone rather than the morning being lost.
+
+The chunking below exists for one hard-won Gemini finding: a single long
+take degrades. Past about a minute the voice drifts muffled and nasal on
+every Gemini TTS model — Google documents it, and we heard it clearly at
+ninety-seven seconds. So the fallback cuts the script at its paragraph
+seams, synthesizes a piece at a time, and stitches with a breath between.
+`split_chunks` also still shapes the transcript segments on every engine.
 
 Two rules the audition paid for:
 
@@ -35,6 +40,7 @@ import httpx
 from .. import config
 from ..prompts import DELIVERY_DIRECTION
 from ..state import DeskState
+from . import fish
 
 
 def split_chunks(script: str, limit: int = config.MAX_CHUNK_CHARS) -> list[str]:
@@ -168,22 +174,25 @@ def encode_mp3(pcm: bytes) -> bytes:
         return mp3_path.read_bytes()
 
 
-def make_tts_node(synthesizer=synthesize_chunk, *, with_audio: bool = True):
+def make_tts_node(
+    gemini_synth=synthesize_chunk,
+    *,
+    fish_synth=fish.synthesize_show,
+    with_audio: bool = True,
+):
     """
-    Factory. `with_audio=False` runs the show as text only — used for dry runs
-    and for the days the TTS quota is already spent, so a script still gets
-    written and published rather than the morning being lost entirely.
+    Factory wiring the booth: Fish single-take first, Gemini chunked as the
+    understudy, and — if both engines fail — a text-only publish rather than
+    a failed run. `with_audio=False` skips synthesis outright, for dry runs
+    and mornings the quota is knowingly already spent.
     """
 
-    def tts_node(state: DeskState) -> DeskState:
-        script = state.get("script") or ""
-        chunks = split_chunks(script)
-        transcript = [{"speaker": "ANCHOR", "text": c} for c in chunks]
+    def text_only(transcript: list[dict], reason: str, count: int) -> DeskState:
+        print(f"  tts: {reason} — {count} segment(s) written, no audio")
+        return {"transcript": transcript, "segment_starts": []}  # type: ignore[return-value]
 
-        if not with_audio:
-            print(f"  tts: skipped — {len(chunks)} segment(s) written, no audio")
-            return {"transcript": transcript, "segment_starts": []}  # type: ignore[return-value]
-
+    def gemini_chunked(chunks: list[str]) -> tuple[bytes, list[float], str]:
+        """The original pipeline: per-paragraph takes stitched with a breath."""
         model = config.TTS_MODEL
         pcms: list[bytes] = []
         starts: list[float] = []
@@ -191,12 +200,39 @@ def make_tts_node(synthesizer=synthesize_chunk, *, with_audio: bool = True):
 
         for index, chunk in enumerate(chunks, start=1):
             print(f"  tts: chunk {index}/{len(chunks)} ({len(chunk)} chars) on {model}")
-            pcm = synthesizer(chunk, model, config.TTS_VOICE)
+            pcm = gemini_synth(chunk, model, config.TTS_VOICE)
             starts.append(round(elapsed, 2))
             elapsed += len(pcm) / 2 / config.PCM_SAMPLE_RATE + config.CHUNK_GAP_MS / 1000
             pcms.append(pcm)
 
-        joined = stitch(pcms)
+        return stitch(pcms), starts, model
+
+    def tts_node(state: DeskState) -> DeskState:
+        script = state.get("script") or ""
+        chunks = split_chunks(script)
+        # The transcript is the spoken words; the stage directions stay in the
+        # booth. Every engine — and the fact-checked B-side — sees the same text.
+        spoken = [fish.strip_tags(c) for c in chunks]
+        transcript = [{"speaker": "ANCHOR", "text": s} for s in spoken]
+
+        if not with_audio:
+            return text_only(transcript, "skipped", len(chunks))
+
+        try:
+            print(f"  tts: full take ({len(script)} chars) on {config.FISH_TTS_MODEL}")
+            joined, starts = fish_synth(script)
+            model = f"fish/{config.FISH_TTS_MODEL}"
+        except Exception as fish_err:  # noqa: BLE001 — any failure means understudy
+            print(f"  tts: fish engine failed ({fish_err}); falling back to Gemini")
+            try:
+                # Gemini would read "[break]" aloud, so it gets the bare words.
+                joined, starts, model = gemini_chunked(spoken)
+            except Exception as gemini_err:  # noqa: BLE001
+                # Both engines down. The B-side must still reach the shelf: a
+                # transcript-only morning beats a lost one.
+                print(f"  tts: gemini fallback failed too ({gemini_err})")
+                return text_only(transcript, "no engine available", len(chunks))
+
         duration = len(joined) / 2 / config.PCM_SAMPLE_RATE
         mp3 = encode_mp3(joined)
         print(f"  tts: {duration:.1f}s, {len(mp3) / 1024:.0f} KB mp3")
