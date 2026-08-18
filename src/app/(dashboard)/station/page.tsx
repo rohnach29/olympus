@@ -74,7 +74,10 @@ export default async function StationPage({
 
   return (
     <div className="ledger">
-      <main>
+      {/* The other rooms stretch to fill any desk, but a record sleeve has a
+          natural size — past ~1480px the stage starts leaving acres of empty
+          paper on the right, so the whole room centers itself instead. */}
+      <main className="mx-auto max-w-[1480px]">
         {/* The station is filed by broadcast rather than by day, so it keeps
             the ledger's nav but carries its own centered masthead. */}
         <nav className="flex items-baseline justify-between pb-6 font-[family-name:var(--lg-mono)] text-[10px] tracking-[.14em] text-[var(--lg-mut)]">
