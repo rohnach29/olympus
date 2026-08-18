@@ -51,6 +51,25 @@ jobs:
         working-directory: worker
         run: pip install -r requirements.txt
 
+      - name: Check the secrets arrived
+        env:
+          STATION_API_URL: ${{ secrets.STATION_API_URL }}
+          STATION_SECRET: ${{ secrets.STATION_SECRET }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+        run: |
+          # Presence only — values are never printed.
+          ok=1
+          for name in STATION_API_URL STATION_SECRET GEMINI_API_KEY DIRECT_DATABASE_URL; do
+            if [ -n "${!name}" ]; then
+              echo "✓ $name is set (${#name} chars name, $(eval "echo \${#$name}") chars value)"
+            else
+              echo "✗ $name is MISSING — repo Settings → Secrets and variables → Actions → Repository secrets"
+              ok=0
+            fi
+          done
+          [ "$ok" = "1" ] || exit 1
+
       - name: Check the gate still holds
         working-directory: worker
         run: python -m pytest
