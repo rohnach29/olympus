@@ -16,8 +16,9 @@
  *   type fix — a raw postgres() connection here would store shifted times.
  *
  * Usage:
- *   npx tsx scripts/seed-history.mts          # seed 30 days ending yesterday
- *   npx tsx scripts/seed-history.mts --undo   # remove everything seeded
+ *   npx tsx scripts/seed-history.mts               # seed 30 days ending yesterday
+ *   npx tsx scripts/seed-history.mts --last-night  # seed only the night ending today
+ *   npx tsx scripts/seed-history.mts --undo        # remove everything seeded
  */
 
 import { config } from "dotenv";
@@ -306,6 +307,82 @@ async function seed(userId: string) {
   console.log(`  skipped real data — nights: ${[...nightTaken].join(", ") || "none"}; hr days: ${hrTaken.size}; food days: ${[...foodTaken].join(", ") || "none"}; workout days: ${[...workoutTaken].join(", ") || "none"}`);
 }
 
+// ---------- last night only ----------
+
+/**
+ * Seeds just the night that ended this morning — the one the seeder's normal
+ * window deliberately leaves alone ("today is the live day the watch owns").
+ * Exists for mornings when the watch wasn't worn but you still want the
+ * station's 11:00 press run to have a night to report. Refuses to shadow a
+ * real night, and is idempotent (a second run inserts nothing new).
+ */
+async function seedLastNight(userId: string) {
+  const today = localToday();
+  const prev = shiftDate(today, -1);
+  const localDay = (d: Date) =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+
+  const existing = await db
+    .select({ wakeTime: sleepSessions.wakeTime, source: sleepSessions.source })
+    .from(sleepSessions)
+    .where(eq(sleepSessions.userId, userId));
+  const tonight = existing.find((n) => localDay(n.wakeTime) === today);
+  if (tonight) {
+    console.log(
+      `a ${tonight.source === SEED_SOURCE ? "seeded" : "REAL"} night already ends this morning (${today}) — nothing to do`
+    );
+    return;
+  }
+
+  const weekend = isWeekend(today);
+  const bedH = between(22.7, 24.4) + (weekend ? 0.6 : 0);
+  const bedtime = bedH >= 24 ? at(today, bedH - 24) : at(prev, bedH);
+  const latency = int(8, 25);
+  const awake = int(15, 40);
+  let total = int(390, 470) + (weekend ? int(0, 35) : 0);
+  total = Math.max(330, Math.min(515, total));
+  const inBed = total + awake + latency;
+  const wakeTime = new Date(bedtime.getTime() + inBed * 60000);
+
+  const deep = Math.round(total * between(0.14, 0.21));
+  const rem = Math.round(total * between(0.19, 0.26));
+  const light = total - deep - rem;
+  const hrvAvg = int(46, 62);
+  const restingHr = int(52, 60);
+
+  const score = calculateSleepScore(
+    { totalMinutes: total, inBedMinutes: inBed, deepSleepMinutes: deep, remSleepMinutes: rem, lightSleepMinutes: light, awakeMinutes: awake, sleepLatencyMinutes: latency, hrvAvg },
+    null
+  );
+
+  await db
+    .insert(sleepSessions)
+    .values({
+      userId,
+      bedtime,
+      wakeTime,
+      sleepDate: today,
+      totalMinutes: total,
+      inBedMinutes: inBed,
+      deepSleepMinutes: deep,
+      remSleepMinutes: rem,
+      lightSleepMinutes: light,
+      awakeMinutes: awake,
+      sleepLatencyMinutes: latency,
+      sleepScore: score.totalScore,
+      efficiency: ((total / inBed) * 100).toFixed(1),
+      hrvAvg,
+      restingHr,
+      respiratoryRate: between(12.5, 15.5).toFixed(1),
+      source: SEED_SOURCE,
+      metadata: { seeded: true },
+    })
+    .onConflictDoNothing();
+
+  const hm = Math.floor(total / 60) + "h" + String(total % 60).padStart(2, "0") + "m";
+  console.log(`seeded last night (${prev} → ${today}): ${hm} asleep, score ${score.totalScore}, deep ${deep}m, HRV ${hrvAvg}`);
+}
+
 // ---------- main ----------
 
 const [user] = await db.select({ id: users.id, email: users.email }).from(users).limit(1);
@@ -314,6 +391,8 @@ console.log(`user: ${user.email}`);
 
 if (process.argv.includes("--undo")) {
   await undo(user.id);
+} else if (process.argv.includes("--last-night")) {
+  await seedLastNight(user.id);
 } else {
   await seed(user.id);
 }
