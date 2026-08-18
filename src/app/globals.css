@@ -120,8 +120,15 @@
   }
 }
 
-* {
-  border-color: hsl(var(--border));
+/* In @layer base so Tailwind border-color utilities (in @layer utilities)
+   can override it. Un-layered, this rule would beat every layered utility
+   regardless of specificity — layer order is compared before specificity —
+   which silently repainted all `border-[var(--…)]` colors with the token
+   below. */
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
 }
 
 body {
@@ -402,10 +409,10 @@ body {
 
 /* This file's `* { border-color: hsl(var(--border)) }` reset carries dark
    values, so a ledger element written as a bare `border-t` would inherit one.
-   Rather than override border-color on every descendant — which would also
-   beat any Tailwind border utility used inside the sheet — the token itself is
-   redefined here. The reset then paints the Gallery hairline by default, and a
-   utility class still wins, because `*` has no specificity. */
+   Rather than override border-color on every descendant, the token itself is
+   redefined here: the reset paints the Gallery hairline by default, and a
+   Tailwind border-color utility wins because the reset sits in @layer base
+   while utilities live in the later @layer utilities. */
 
 /* The wrapper cannot paint the overscroll area or the scrollbar, so the
    body follows the sheet whenever one is on screen. */
@@ -420,4 +427,21 @@ body:has(.ledger) {
   letter-spacing: 0.3em;
   text-transform: uppercase;
   color: var(--lg-mut);
+}
+
+/* The station's turntable. One revolution ≈ a 45 at a domestic tempo; the
+   element toggles animation-play-state so pausing the show parks the platter
+   mid-spin instead of snapping it back to twelve o'clock. */
+@keyframes lg-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.lg-spin {
+  animation: lg-spin 1.9s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lg-spin {
+    animation: none;
+  }
 }

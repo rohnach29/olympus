@@ -38,6 +38,41 @@ export function waveformOf(episode: Episode): number[] {
 }
 
 /**
+ * A record needs a title, and the script already wrote one — the writer's
+ * house style opens with "…the lead story this morning is X". These helpers
+ * lift that X (or the first substantive sentence) off the transcript so each
+ * pressing gets an A-side title and a b/w credit without asking the LLM for
+ * anything new.
+ */
+function headlineFrom(text: string): string | null {
+  const sentences = text.match(/[^.!?]+[.!?]+/g)?.map((s) => s.trim()) ?? [];
+  if (sentences.length === 0) return null;
+
+  // Best case: the anchor named the lead story — quote it verbatim.
+  const lead = text.match(/lead story[^.!?]*?\bis\b\s+([^.!?]+[.!?])/i);
+  if (lead) {
+    const phrase = lead[1].trim();
+    return phrase.charAt(0).toUpperCase() + phrase.slice(1);
+  }
+
+  // Otherwise the first sentence that isn't date-and-greeting boilerplate.
+  const meaty =
+    sentences.find((s) => !/^(Good morning|It is |Station Olympus)/i.test(s)) ??
+    sentences[0];
+  return meaty.length > 72 ? meaty.slice(0, 69).trimEnd() + "…" : meaty;
+}
+
+/** The A-side title, quoted on the label side of the page. */
+export function aSideTitle(transcript: TranscriptLine[]): string {
+  return headlineFrom(transcript[0]?.text ?? "") ?? "The morning report";
+}
+
+/** The "b/w" (backed-with) credit — a line off the second segment. */
+export function bwTitle(transcript: TranscriptLine[]): string | null {
+  return transcript.length > 1 ? headlineFrom(transcript[1].text) : null;
+}
+
+/**
  * The episode for a given morning, or the most recent one at or before it.
  *
  * Asking for "today" before the press run has finished should show you

@@ -4,15 +4,17 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getUserTimezone } from "@/lib/utils/timezone";
 import { localDateStr, localHHMM, weekdayName } from "@/lib/ledger/time";
 import {
+  aSideTitle,
+  bwTitle,
   getEpisodeOnOrBefore,
   listEpisodes,
   segmentStartsOf,
   transcriptOf,
-  waveformOf,
 } from "@/lib/station/episodes";
-import { StationPlayer } from "@/components/ledger/station-player";
+import { Clock } from "@/components/ledger/clock";
+import { Turntable } from "@/components/ledger/turntable";
 
-// The room reports whether this morning's press run has landed yet, so it is
+// The room reports whether this morning's pressing has landed yet, so it is
 // never cached.
 export const dynamic = "force-dynamic";
 
@@ -20,63 +22,21 @@ function shortDate(dateStr: string): string {
   return dateStr.slice(5).replace("-", ".");
 }
 
-function runtime(seconds: number | null): string {
-  if (!seconds) return "—";
-  const m = Math.floor(seconds / 60);
-  return `${m}:${String(Math.round(seconds % 60)).padStart(2, "0")}`;
+function listeningTotal(seconds: number): string {
+  if (seconds <= 0) return "0:00";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.round(seconds % 60);
+  return h > 0
+    ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+    : `${m}:${String(s).padStart(2, "0")}`;
 }
 
-/**
- * What the show was written from, frozen at press time.
- *
- * The ledger is live — a late sync can revise last night hours after the
- * broadcast — so this is the snapshot the writer actually saw. It is also the
- * proof of the whole arrangement: the anchor cannot say a number that was not
- * in this column.
- */
-function WrittenFrom({ facts }: { facts: unknown }) {
-  if (!facts || typeof facts !== "object") return null;
-  const f = facts as Record<string, Record<string, unknown> | undefined>;
-
-  const num = (v: unknown) => (typeof v === "number" ? v : null);
-  const rows: { label: string; value: string }[] = [];
-
-  const recovery = num(f.verdict?.recovery);
-  if (recovery !== null) {
-    rows.push({ label: "Recovery", value: `${recovery} · ${f.verdict?.band ?? ""}` });
-  }
-  if (f.night) {
-    const n = f.night as Record<string, unknown>;
-    if (typeof n.asleep === "string") rows.push({ label: "Asleep", value: n.asleep });
-    if (num(n.score) !== null) rows.push({ label: "Sleep score", value: String(n.score) });
-    if (num(n.deep_min) !== null) rows.push({ label: "Deep", value: `${n.deep_min} min` });
-  }
-  if (f.yesterday) {
-    const y = f.yesterday as Record<string, unknown>;
-    if (num(y.steps) !== null) rows.push({ label: "Steps", value: Number(y.steps).toLocaleString() });
-    if (num(y.protein_g) !== null) rows.push({ label: "Protein", value: `${y.protein_g} g` });
-  }
-
-  if (rows.length === 0) return null;
-
-  return (
-    <aside className="border-t border-[var(--lg-ink)] pt-3">
-      <span className="ledger-k">Written from</span>
-      <dl className="mt-2.5 space-y-[7px]">
-        {rows.map((r) => (
-          <div key={r.label} className="flex items-baseline justify-between gap-3">
-            <dt className="font-[family-name:var(--lg-mono)] text-[9.5px] uppercase tracking-[.16em] text-[var(--lg-mut)]">
-              {r.label}
-            </dt>
-            <dd className="text-[13px] tabular-nums">{r.value}</dd>
-          </div>
-        ))}
-      </dl>
-      <p className="mt-3 text-[10px] leading-[1.5] text-[var(--lg-g3)]">
-        The snapshot the writer saw at press time.
-      </p>
-    </aside>
-  );
+/** "gemini-3.1-flash-tts-preview" → the credit that fits on a record label. */
+function voiceCredit(ttsModel: string | null): string {
+  if (ttsModel?.includes("3.1")) return "CHARON 3.1";
+  if (ttsModel?.includes("2.5")) return "CHARON 2.5";
+  return "CHARON";
 }
 
 export default async function StationPage({
@@ -102,134 +62,134 @@ export default async function StationPage({
   const airDate = episode?.airDate ?? null;
   const transcript = episode ? transcriptOf(episode) : [];
 
+  // Flipping through the crate: the shelf is newest-first, so the previous
+  // pressing sits after the viewed one and the next before it.
+  const shelfIndex = airDate ? shelf.findIndex((s) => s.airDate === airDate) : -1;
+  const older = shelfIndex >= 0 ? shelf[shelfIndex + 1] : undefined;
+  const newer = shelfIndex > 0 ? shelf[shelfIndex - 1] : undefined;
+
+  const onAir = airDate === today && episode?.audioUrl !== null;
+  const pressed = shelf.filter((s) => s.hasAudio);
+  const totalListening = pressed.reduce((sum, s) => sum + (s.durationS ?? 0), 0);
+
   return (
     <div className="ledger">
       <main>
-        {/* The station keeps the ledger's masthead proportions but is filed by
-            broadcast rather than by day, so it carries its own header. */}
-        <header>
-          <div className="flex items-baseline justify-between border-b-2 border-[var(--lg-ink)] pb-4">
-            <div className="text-[74px] font-extralight leading-none tracking-[.01em]">
-              {airDate ? shortDate(airDate) : "—"}
-            </div>
+        {/* The station is filed by broadcast rather than by day, so it keeps
+            the ledger's nav but carries its own centered masthead. */}
+        <nav className="flex items-baseline justify-between pb-6 font-[family-name:var(--lg-mono)] text-[10px] tracking-[.14em] text-[var(--lg-mut)]">
+          {older ? (
+            <Link
+              href={`/station?date=${older.airDate}`}
+              className="hover:text-[var(--lg-ink)]"
+            >
+              ← {shortDate(older.airDate)}
+            </Link>
+          ) : (
+            <span className="text-[var(--lg-g3)]">← earlier</span>
+          )}
 
-            <div className="text-center">
-              <div className="text-[13px] font-semibold uppercase tracking-[.44em]">
-                Station Olympus · 87.4
-              </div>
-              <div className="ledger-k mt-1.5">
-                {episode
-                  ? `${weekdayName(episode.airDate)}'s broadcast — ${
-                      episode.audioDurationS
-                        ? runtime(episode.audioDurationS)
-                        : `${transcript.length} segments`
-                    }`
-                  : "Off air"}
-              </div>
-            </div>
+          <span className="flex gap-2">
+            <Link href="/" className="hover:text-[var(--lg-ink)]">
+              TODAY
+            </Link>
+            <span className="text-[var(--lg-g3)]">·</span>
+            <span className="font-bold text-[var(--lg-acc)]">STATION</span>
+            <span className="text-[var(--lg-g3)]">·</span>
+            <Link href="/history" className="hover:text-[var(--lg-ink)]">
+              ALMANAC
+            </Link>
+            <span className="text-[var(--lg-g3)]">·</span>
+            <Link href="/blood-work" className="hover:text-[var(--lg-ink)]">
+              BLOOD WORK
+            </Link>
+          </span>
 
-            <div className="text-right font-[family-name:var(--lg-mono)] text-[11px] tracking-[.1em] text-[var(--lg-mut)]">
-              {localHHMM(new Date(), tz)}
-            </div>
+          {newer ? (
+            <Link
+              href={`/station?date=${newer.airDate}`}
+              className="hover:text-[var(--lg-ink)]"
+            >
+              {shortDate(newer.airDate)} →
+            </Link>
+          ) : (
+            <span className="text-[var(--lg-g3)]">tomorrow →</span>
+          )}
+        </nav>
+
+        <header className="relative text-center">
+          <div className="absolute left-0 top-1.5 text-left font-[family-name:var(--lg-mono)] text-[11px] leading-[1.9] tracking-[.1em] text-[var(--lg-mut)]">
+            <Clock tz={tz} initial={localHHMM(new Date(), tz)} />
+            <br />
+            <b className="font-semibold text-[var(--lg-ink)]">
+              {airDate
+                ? `${weekdayName(airDate).slice(0, 3).toUpperCase()} ${shortDate(airDate)}`
+                : "OFF AIR"}
+            </b>
           </div>
 
-          <nav className="flex justify-between pb-7 pt-2 font-[family-name:var(--lg-mono)] text-[10px] tracking-[.14em]">
-            <span className="text-[var(--lg-g3)]">
-              {airDate && airDate !== today ? `broadcast ${shortDate(airDate)}` : ""}
-            </span>
-            <span className="flex gap-2">
-              <Link href="/" className="text-[var(--lg-mut)] hover:text-[var(--lg-ink)]">
-                TODAY
-              </Link>
-              <span className="text-[var(--lg-g3)]">·</span>
-              <span className="font-bold text-[var(--lg-acc)]">STATION</span>
-              <span className="text-[var(--lg-g3)]">·</span>
-              <Link href="/history" className="text-[var(--lg-mut)] hover:text-[var(--lg-ink)]">
-                ALMANAC
-              </Link>
-              <span className="text-[var(--lg-g3)]">·</span>
-              <Link href="/blood-work" className="text-[var(--lg-mut)] hover:text-[var(--lg-ink)]">
-                BLOOD WORK
-              </Link>
-            </span>
-            <span />
-          </nav>
+          <div
+            className="font-[family-name:var(--lg-mono)] text-[10px] uppercase tracking-[.5em] text-[var(--lg-mut)]"
+            style={{ textIndent: ".5em" }}
+          >
+            Broadcasting to an audience of one
+          </div>
+          <h1
+            className="mt-3 text-[42px] font-semibold uppercase tracking-[.3em]"
+            style={{ textIndent: ".3em" }}
+          >
+            Station Olympus · <span className="text-[var(--lg-acc)]">87.4</span>
+          </h1>
+          <p className="mt-2.5 text-[14px] italic text-[var(--lg-g2)]">
+            Pressed at 11:00, one take, every number checked before it reaches
+            the lathe.
+          </p>
+
+          <span
+            className={`absolute right-0 top-1.5 border px-3 pb-1.5 pt-[7px] font-[family-name:var(--lg-mono)] text-[10px] tracking-[.28em] ${
+              onAir
+                ? "border-[var(--lg-acc)] text-[var(--lg-acc)]"
+                : "border-[var(--lg-g3)] text-[var(--lg-mut)]"
+            }`}
+            style={{ textIndent: ".28em" }}
+          >
+            {onAir ? "ON AIR" : "OFF AIR"}
+          </span>
         </header>
 
         {episode ? (
-          <>
-            <div className="mb-5 flex items-baseline justify-between">
-              <span className="ledger-k">
-                {airDate === today ? "This morning's broadcast" : "From the shelf"}
-              </span>
-              {episode.status === "no_audio" && (
-                <span className="font-[family-name:var(--lg-mono)] text-[10px] tracking-[.1em] text-[var(--lg-mut)]">
-                  written, not voiced
-                </span>
-              )}
-              {episode.status === "expired" && (
-                <span className="font-[family-name:var(--lg-mono)] text-[10px] tracking-[.1em] text-[var(--lg-mut)]">
-                  audio expired — transcript kept
-                </span>
-              )}
-            </div>
-
-            {/* Transcript left, the facts it was written from right — the same
-                reading-column-plus-figures geometry the day sheet uses. */}
-            <div className="grid items-start gap-10" style={{ gridTemplateColumns: "1fr 250px" }}>
-              <StationPlayer
-                audioUrl={episode.audioUrl}
-                durationS={episode.audioDurationS}
-                waveform={waveformOf(episode)}
-                transcript={transcript}
-                segmentStarts={segmentStartsOf(episode)}
-              />
-              <WrittenFrom facts={episode.factsUsed} />
-            </div>
-          </>
+          <Turntable
+            audioUrl={episode.audioUrl}
+            durationS={episode.audioDurationS}
+            status={episode.status}
+            airDate={episode.airDate}
+            weekday={weekdayName(episode.airDate)}
+            voice={voiceCredit(episode.ttsModel)}
+            aSide={aSideTitle(transcript)}
+            bw={bwTitle(transcript)}
+            transcript={transcript}
+            segmentStarts={segmentStartsOf(episode)}
+            shelf={shelf.slice(0, 8).map((s) => ({
+              airDate: s.airDate,
+              hasAudio: s.hasAudio,
+              durationS: s.durationS,
+            }))}
+          />
         ) : (
-          <p className="text-[15px] leading-[1.7] text-[var(--lg-g2)]">
-            Nothing has been broadcast yet. The press run assembles a show each
-            morning from the ledger — when one lands, it plays here.
+          <p className="mx-auto mt-12 max-w-[52ch] text-center text-[15px] leading-[1.7] text-[var(--lg-g2)]">
+            Nothing has been pressed yet. The press run cuts one single each
+            morning from the ledger — when the first record lands, it plays
+            here.
           </p>
         )}
 
-        {shelf.length > 1 && (
-          <section className="mt-9">
-            <span className="ledger-k">The shelf</span>
-            <div className="mt-3 divide-y divide-[var(--lg-rule)] border-t border-[var(--lg-rule)]">
-              {shelf.map((stub) => {
-                const current = stub.airDate === airDate;
-                return (
-                  <Link
-                    key={stub.airDate}
-                    href={`/station?date=${stub.airDate}`}
-                    className="flex items-baseline justify-between py-[7px] text-[12.5px] hover:bg-[var(--lg-chipbg)]"
-                  >
-                    <span
-                      className={
-                        current
-                          ? "font-semibold text-[var(--lg-acc)]"
-                          : "text-[var(--lg-ink)]"
-                      }
-                    >
-                      {weekdayName(stub.airDate)} {shortDate(stub.airDate)}
-                    </span>
-                    <span className="font-[family-name:var(--lg-mono)] text-[10px] tabular-nums tracking-[.1em] text-[var(--lg-mut)]">
-                      {stub.hasAudio ? runtime(stub.durationS) : "transcript only"}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
-        <footer className="mt-[18px] flex justify-between border-t border-[var(--lg-ink)] pt-[11px] text-[9px] uppercase tracking-[.26em] text-[var(--lg-mut)]">
+        <footer className="mt-8 flex justify-between border-t border-[var(--lg-ink)] pt-[11px] text-[9px] uppercase tracking-[.26em] text-[var(--lg-mut)]">
           <span>Every number spoken is checked against the ledger before air</span>
-          <Link href="/settings" className="hover:text-[var(--lg-ink)]">
-            Settings
-          </Link>
+          <span>
+            {pressed.length} single{pressed.length === 1 ? "" : "s"} in the
+            crate · {listeningTotal(totalListening)} total listening
+          </span>
+          <span>Tomorrow&rsquo;s pressing — 11:00</span>
         </footer>
       </main>
     </div>
