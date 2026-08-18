@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Clock } from "./clock";
 import type { DayLedger } from "@/lib/ledger/types";
 
-type Room = "today" | "station" | "almanac" | "blood" | "none";
+type Room = "today" | "station" | "almanac" | "blood" | "settings" | "none";
 
 function shortDate(dateStr: string): string {
   return dateStr.slice(5).replace("-", ".");
@@ -20,7 +20,7 @@ export function Masthead({
 }: {
   ledger: Pick<
     DayLedger,
-    "date" | "tz" | "weekday" | "city" | "reportNo" | "watch" | "prevDate" | "nextDate" | "isToday"
+    "date" | "tz" | "weekday" | "reportNo" | "watch" | "prevDate" | "nextDate" | "isToday"
   >;
   room: Room;
   clockInitial: string;
@@ -54,7 +54,7 @@ export function Masthead({
             Olympus · Daily Ledger
           </div>
           <div className="ledger-k mt-1.5">
-            {ledger.weekday} — {ledger.city} — Report № {ledger.reportNo}
+            {ledger.weekday} — Report No. {ledger.reportNo}
           </div>
         </div>
 
@@ -81,6 +81,8 @@ export function Masthead({
           {navLink("/history", "ALMANAC", room === "almanac")}
           <span className="text-[var(--lg-g3)]">·</span>
           {navLink("/blood-work", "BLOOD WORK", room === "blood")}
+          <span className="text-[var(--lg-g3)]">·</span>
+          {navLink("/settings", "SETTINGS", room === "settings")}
         </span>
 
         {ledger.nextDate ? (

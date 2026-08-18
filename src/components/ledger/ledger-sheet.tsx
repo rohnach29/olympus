@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Masthead } from "./masthead";
 import { VerdictBand } from "./verdict-band";
 import { TrackRow, TracksGrid, TimeAxis } from "./tracks-grid";
@@ -187,17 +186,11 @@ export function LedgerSheet({
 
       <WeekStrip week={ledger.week} />
 
-      <footer className="mt-[18px] flex justify-between border-t border-[var(--lg-ink)] pt-[11px] text-[9px] uppercase tracking-[.26em] text-[var(--lg-mut)]">
-        <span>N = 1 · Every number from your watch or your words</span>
-        <span className="flex gap-4">
-          <span>
-            Report № {ledger.reportNo} ·{" "}
-            {room === "today" ? "Printed continuously" : "Day closed"}
-          </span>
-          <Link href="/settings" className="hover:text-[var(--lg-ink)]">
-            Settings
-          </Link>
-        </span>
+      {/* Settings moved up into the masthead nav, so the colophon is left with
+          just the issue line it always was. */}
+      <footer className="mt-[18px] border-t border-[var(--lg-ink)] pt-[11px] text-[9px] uppercase tracking-[.26em] text-[var(--lg-mut)]">
+        Report No. {ledger.reportNo} ·{" "}
+        {room === "today" ? "Printed continuously" : "Day closed"}
       </footer>
     </main>
   );

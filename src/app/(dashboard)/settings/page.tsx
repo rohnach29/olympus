@@ -256,6 +256,10 @@ export default function SettingsPage() {
                 TODAY
               </Link>
               <span className="text-[var(--lg-g3)]">·</span>
+              <Link href="/station" className="text-[var(--lg-mut)] hover:text-[var(--lg-ink)]">
+                STATION
+              </Link>
+              <span className="text-[var(--lg-g3)]">·</span>
               <Link href="/history" className="text-[var(--lg-mut)] hover:text-[var(--lg-ink)]">
                 ALMANAC
               </Link>
@@ -263,8 +267,12 @@ export default function SettingsPage() {
               <Link href="/blood-work" className="text-[var(--lg-mut)] hover:text-[var(--lg-ink)]">
                 BLOOD WORK
               </Link>
+              <span className="text-[var(--lg-g3)]">·</span>
+              <span className="font-bold text-[var(--lg-acc)]">SETTINGS</span>
             </span>
-            <span className="font-bold text-[var(--lg-acc)]">SETTINGS</span>
+            {/* Balances the leading link so the room list stays centred; the
+                settings room has no next page to offer. */}
+            <span />
           </nav>
         </header>
 
@@ -386,8 +394,7 @@ export default function SettingsPage() {
           </>
         )}
 
-        <footer className="mt-10 flex justify-between border-t border-[var(--lg-ink)] pt-[11px] text-[9px] uppercase tracking-[.26em] text-[var(--lg-mut)]">
-          <span>N = 1 · Every number from your watch or your words</span>
+        <footer className="mt-10 border-t border-[var(--lg-ink)] pt-[11px] text-[9px] uppercase tracking-[.26em] text-[var(--lg-mut)]">
           <Link href="/" className="hover:text-[var(--lg-ink)]">
             Back to today
           </Link>

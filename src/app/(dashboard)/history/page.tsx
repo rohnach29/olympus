@@ -4,7 +4,6 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getMonthLedger } from "@/lib/ledger/assemble";
 import { localDateStr, localHHMM } from "@/lib/ledger/time";
 import { getUserTimezone } from "@/lib/utils/timezone";
-import { Masthead } from "@/components/ledger/masthead";
 import type { AlmanacCell } from "@/lib/ledger/types";
 
 export const dynamic = "force-dynamic";
@@ -138,6 +137,13 @@ export default async function HistoryPage({
               >
                 BLOOD WORK
               </Link>
+              <span className="text-[var(--lg-g3)]">·</span>
+              <Link
+                href="/settings"
+                className="text-[var(--lg-mut)] hover:text-[var(--lg-ink)]"
+              >
+                SETTINGS
+              </Link>
             </span>
             {month.nextMonth ? (
               <Link
@@ -178,13 +184,6 @@ export default async function HistoryPage({
             ))}
           </div>
         )}
-
-        <footer className="mt-[18px] flex justify-between border-t border-[var(--lg-ink)] pt-[11px] text-[9px] uppercase tracking-[.26em] text-[var(--lg-mut)]">
-          <span>Missed days stay blank — the archive keeps its gaps</span>
-          <Link href="/settings" className="hover:text-[var(--lg-ink)]">
-            Settings
-          </Link>
-        </footer>
       </main>
     </div>
   );

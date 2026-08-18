@@ -106,6 +106,10 @@ export default async function StationPage({
             <Link href="/blood-work" className="hover:text-[var(--lg-ink)]">
               BLOOD WORK
             </Link>
+            <span className="text-[var(--lg-g3)]">·</span>
+            <Link href="/settings" className="hover:text-[var(--lg-ink)]">
+              SETTINGS
+            </Link>
           </span>
 
           {newer ? (

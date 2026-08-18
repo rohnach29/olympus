@@ -1,3 +1,4 @@
+import { Children } from "react";
 import { NowLine } from "./now-line";
 
 /**
@@ -70,10 +71,19 @@ export function TracksGrid({
   tz: string;
   children: React.ReactNode;
 }) {
+  // The rows have to be declared, not left to auto-placement: `grid-row: 1 /
+  // -1` on the now-line resolves -1 against the *explicit* grid, so with only
+  // implicit rows the line collapsed onto the first track and the rule showed
+  // across the heart row alone. One row per child keeps this honest.
+  const rows = Children.count(children);
+
   return (
     <div
       className="relative grid"
-      style={{ gridTemplateColumns: "var(--lg-cols)" }}
+      style={{
+        gridTemplateColumns: "var(--lg-cols)",
+        gridTemplateRows: `repeat(${rows}, auto)`,
+      }}
     >
       {children}
 
