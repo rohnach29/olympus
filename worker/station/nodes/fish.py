@@ -107,34 +107,61 @@ def paragraph_starts(script: str, alignment: list[dict]) -> list[float]:
     """
     Where each paragraph begins in the recording.
 
-    Walks the alignment word-by-word against the tag-stripped paragraphs.
-    Deliberately faint-hearted: any disagreement returns [] — the page shows
-    numbered segments without seek marks, which is a far better morning than
-    a run failed over timestamps or, worse, marks that seek to the wrong line.
+    Walks the alignment against the tag-stripped paragraphs, anchoring each
+    paragraph on its first two words. Fish occasionally merges or splits a
+    token mid-paragraph, which drifts the expected position — so the anchor
+    is hunted in a small window on *both* sides of where counting says it
+    should be, and the two-word match keeps a coincidental single word from
+    anchoring the wrong line.
+
+    Deliberately faint-hearted beyond that: real disagreement returns [] —
+    the page shows numbered segments without seek marks, which is a far
+    better morning than a run failed over timestamps or, worse, marks that
+    seek to the wrong line.
     """
     paragraphs = [p for p in (strip_tags(p) for p in script.split("\n\n")) if p]
     words = [w["text"].lower() for w in alignment]
 
+    def find_anchor(expected: list[str], cursor: int, floor: int) -> int:
+        lo = max(floor, cursor - 6)
+        hi = min(len(words), cursor + 8)
+        for probe in range(lo, hi):
+            if words[probe] != expected[0]:
+                continue
+            if len(expected) == 1 or (
+                probe + 1 < len(words) and words[probe + 1] == expected[1]
+            ):
+                return probe
+        return -1
+
     starts: list[float] = []
     cursor = 0
-    for paragraph in paragraphs:
+    floor = 0  # never anchor at or before the previous paragraph's start
+    for index, paragraph in enumerate(paragraphs):
         expected = _tokens(paragraph)
         if not expected:
             return []
-        # The first word anchors the timestamp; allow a couple of positions of
-        # slack in case Fish merged or dropped a token at the boundary.
-        for probe in range(cursor, min(cursor + 3, len(words))):
-            if words[probe] == expected[0]:
-                cursor = probe
-                break
-        else:
+        anchor = find_anchor(expected, cursor, floor)
+        if anchor < 0:
+            around = " ".join(words[max(0, cursor - 3) : cursor + 5])
+            print(
+                f"  tts: seek-mark walk lost paragraph {index + 1} — "
+                f'expected "{" ".join(expected[:2])}" near "{around}"'
+            )
             return []
-        starts.append(round(alignment[cursor]["start"], 2))
-        cursor += len(expected)
+        starts.append(round(alignment[anchor]["start"], 2))
+        floor = anchor + 1
+        cursor = anchor + len(expected)
 
-    # The whole script should be spoken for; a large surplus or deficit means
-    # the walk drifted and every mark after the drift is a lie.
-    if abs(cursor - len(words)) > 3:
+    # The whole script should be spoken for; a large deficit or surplus means
+    # the walk drifted and every mark after the drift is a lie. A few merged
+    # or split tokens across a whole show are expected and harmless.
+    slack = max(3, len(words) // 25)
+    if abs(cursor - len(words)) > slack:
+        print(
+            f"  tts: seek-mark walk ended {cursor - len(words):+d} words adrift "
+            f"of the recording ({len(words)} spoken)"
+        )
         return []
     return starts
 

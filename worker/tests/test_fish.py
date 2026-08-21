@@ -71,6 +71,21 @@ class TestParagraphStarts:
         alignment = merge_alignment(parse_sse(FIXTURE))
         assert paragraph_starts(PROBE_SCRIPT, alignment) != []
 
+    def test_a_merged_token_mid_paragraph_does_not_lose_the_marks(self):
+        # Fish sometimes fuses adjacent words into one alignment entry; the
+        # count then overshoots and the next anchor sits *behind* the cursor.
+        alignment = merge_alignment(parse_sse(FIXTURE))
+        fused = alignment[2] | {"text": "thisis"}
+        merged = alignment[:2] + [fused] + alignment[4:]
+        assert paragraph_starts(PROBE_SCRIPT, merged) == [0.0, 4.0]
+
+    def test_a_split_token_mid_paragraph_does_not_lose_the_marks(self):
+        # ...and sometimes cleaves one word in two, drifting the other way.
+        alignment = merge_alignment(parse_sse(FIXTURE))
+        a, b = alignment[5] | {"text": "olym"}, alignment[5] | {"text": "pus"}
+        split = alignment[:5] + [a, b] + alignment[6:]
+        assert paragraph_starts(PROBE_SCRIPT, split) == [0.0, 4.0]
+
     def test_a_mismatched_script_yields_no_marks(self):
         alignment = merge_alignment(parse_sse(FIXTURE))
         wrong = "Entirely different words.\n\nNothing matches here."
