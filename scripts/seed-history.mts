@@ -27,7 +27,7 @@ config({ path: ".env.local", quiet: true });
 const { db, users, healthMetrics, sleepSessions, workouts, foodLogs } = await import(
   "../src/lib/db/index"
 );
-const { and, eq, ne, sql: dsql } = await import("drizzle-orm");
+const { and, eq, sql: dsql } = await import("drizzle-orm");
 const { calculateSleepScore } = await import("../src/lib/utils/sleep-scoring");
 
 const TZ_OFFSET = "+05:30"; // Asia/Kolkata, no DST
@@ -46,7 +46,13 @@ function mulberry32(a: number) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-const rng = mulberry32(20260817);
+let rng = mulberry32(20260817);
+/** The window pass keeps the fixed seed (same history every run); the
+ *  last-night mode reseeds per date, or every watchless morning would be
+ *  the identical night read out on air. */
+const reseed = (n: number) => {
+  rng = mulberry32(n);
+};
 const between = (lo: number, hi: number) => lo + rng() * (hi - lo);
 const int = (lo: number, hi: number) => Math.round(between(lo, hi));
 const pick = <T,>(arr: T[]): T => arr[Math.floor(rng() * arr.length)];
@@ -136,25 +142,27 @@ async function seed(userId: string) {
   // Wake-days D-30 … D-1; today stays the live day the watch owns.
   const days = Array.from({ length: DAYS }, (_, i) => shiftDate(today, i - DAYS));
 
-  // What real data already exists (anything not marked as seed)?
+  // What already exists — real or previously seeded. The pass only fills
+  // days with nothing at all, so it can be re-run whenever the watch takes
+  // a holiday without double-seeding the days it filled last time.
   const realNights = await db
     .select({ wakeTime: sleepSessions.wakeTime })
     .from(sleepSessions)
-    .where(and(eq(sleepSessions.userId, userId), ne(sleepSessions.source, SEED_SOURCE)));
+    .where(eq(sleepSessions.userId, userId));
   const realHrDays = await db
     .select({ day: dsql<string>`((${healthMetrics.recordedAt} AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata')::date::text`, n: dsql<number>`count(*)::int` })
     .from(healthMetrics)
-    .where(and(eq(healthMetrics.userId, userId), eq(healthMetrics.metricType, "heart_rate"), ne(healthMetrics.source, SEED_SOURCE)))
+    .where(and(eq(healthMetrics.userId, userId), eq(healthMetrics.metricType, "heart_rate")))
     .groupBy(dsql`1`);
   const realFoodDays = await db
     .select({ day: foodLogs.loggedDate })
     .from(foodLogs)
-    .where(and(eq(foodLogs.userId, userId), dsql`${foodLogs.brand} IS DISTINCT FROM ${FOOD_BRAND}`))
+    .where(eq(foodLogs.userId, userId))
     .groupBy(foodLogs.loggedDate);
   const realWorkoutDays = await db
     .select({ startedAt: workouts.startedAt })
     .from(workouts)
-    .where(and(eq(workouts.userId, userId), dsql`${workouts.metadata}->>'seeded' IS DISTINCT FROM 'true'`));
+    .where(eq(workouts.userId, userId));
 
   const localDay = (d: Date) =>
     new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
@@ -304,7 +312,7 @@ async function seed(userId: string) {
 
   console.log(`seeded ${days[0]} … ${days[days.length - 1]}`);
   console.log(`  nights: ${nNights}  hr samples: ${nMetrics}  workouts: ${nWorkouts}  meals: ${nFood}`);
-  console.log(`  skipped real data — nights: ${[...nightTaken].join(", ") || "none"}; hr days: ${hrTaken.size}; food days: ${[...foodTaken].join(", ") || "none"}; workout days: ${[...workoutTaken].join(", ") || "none"}`);
+  console.log(`  skipped (already had data) — nights: ${nightTaken.size}; hr days: ${hrTaken.size}; food days: ${foodTaken.size}; workout days: ${workoutTaken.size}`);
 }
 
 // ---------- last night only ----------
@@ -334,6 +342,7 @@ async function seedLastNight(userId: string) {
     return;
   }
 
+  reseed(Number(today.replaceAll("-", "")));
   const weekend = isWeekend(today);
   const bedH = between(22.7, 24.4) + (weekend ? 0.6 : 0);
   const bedtime = bedH >= 24 ? at(today, bedH - 24) : at(prev, bedH);

@@ -60,6 +60,18 @@ export async function POST(request: NextRequest) {
     // ---- the audio, if the show got a voice ----
     let audioUrl: string | null = null;
     if (body.audioBase64) {
+      // Fail legibly before fail generically: a missing blob store is a setup
+      // problem the run log should name, not bury in a 500.
+      if (!process.env.BLOB_READ_WRITE_TOKEN) {
+        return NextResponse.json(
+          {
+            error:
+              "Audio storage is not configured: BLOB_READ_WRITE_TOKEN is missing. " +
+              "Create a Vercel Blob store, connect it to this project, and redeploy.",
+          },
+          { status: 503 }
+        );
+      }
       const bytes = Buffer.from(body.audioBase64, "base64");
       if (bytes.length === 0) {
         return NextResponse.json({ error: "audioBase64 decoded to nothing" }, { status: 400 });
@@ -117,7 +129,13 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Station publish error:", error);
-    return NextResponse.json({ error: "Failed to publish episode" }, { status: 500 });
+    // The only caller is the authenticated worker; naming the failure in the
+    // response turns a mystery 500 in the Actions log into a diagnosis.
+    const detail = error instanceof Error ? `: ${error.message.slice(0, 200)}` : "";
+    return NextResponse.json(
+      { error: `Failed to publish episode${detail}` },
+      { status: 500 }
+    );
   }
 }
 
