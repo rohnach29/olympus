@@ -93,6 +93,13 @@ def _numbers_in(value: Any) -> list[float]:
         # without letting a genuine misquote through.
         if len(found) > 1:
             candidates.append(float("".join(found)))
+        # A duration is also one number: "6h37m" spoken as "six hours
+        # thirty-seven minutes" is honestly declared as 397 total minutes —
+        # the writer does that arithmetic every few mornings, and this module
+        # refuses to, so the product goes in the accepted set instead.
+        duration = re.fullmatch(r"(\d+)h(\d+)m", value.strip())
+        if duration:
+            candidates.append(float(duration[1]) * 60 + float(duration[2]))
         return candidates
     return []
 

@@ -118,6 +118,19 @@ class TestCheckScript:
         numbers = [claim("eleven twenty-two", 2322, "night.bedtime")]
         assert check_script(script, numbers, FACTS) == []
 
+    def test_a_duration_may_be_declared_as_total_minutes(self):
+        # Two real runs lost a rewrite to this: the writer speaks "six hours
+        # fifty-two minutes" and declares the arithmetic truth, 412 minutes.
+        # The gate does no math, so the product belongs in the accepted set.
+        script = "You slept six hours fifty-two minutes."
+        numbers = [claim("six hours fifty-two minutes", 412, "night.asleep")]
+        assert check_script(script, numbers, FACTS) == []
+
+    def test_a_duration_total_must_still_be_right(self):
+        script = "You slept six hours fifty-two minutes."
+        numbers = [claim("six hours fifty-two minutes", 397, "night.asleep")]
+        assert check_script(script, numbers, FACTS) != []
+
     def test_a_workout_duration_can_be_quoted_from_its_list(self):
         script = "You gave it forty-four minutes on the mat."
         numbers = [claim("forty-four", 44, "yesterday.workouts[0].durationMinutes")]
