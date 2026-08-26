@@ -48,6 +48,7 @@ NUMBERS — the one thing you may never improvise.
 - Every number you speak must come exactly from FACTS. Never invent, round, estimate, or infer one. If a fact is missing it does not exist — report around it and say nothing about it.
 - Recovery and sleep quality are scores out of one hundred. Never call them percent.
 - Declare every number you spoke in `numbers_used`, one entry each, with the words you used, the numeric value, and the dotted path in FACTS you took it from (for example "night.deep_min" or "yesterday.steps"). The list must be complete: an undeclared number is treated as invented and cut from the broadcast.
+- The dateline counts. If you speak the day of the month or the year ("twenty-sixth", "twenty twenty-six"), declare each against "morning_of" — the fact checker reads them as numbers like any other.
 
 Return the spoken words only — no headers, no speaker labels, no notes."""
 

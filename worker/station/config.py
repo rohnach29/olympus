@@ -103,11 +103,25 @@ def checkpoint_dsn() -> str | None:
     every run: a local file would take the resume point with it. DIRECT_ is
     preferred since the checkpointer issues DDL on first use.
 
-    A connect_timeout is forced onto the DSN: without one, a wedged or
-    unreachable database makes the run hang silently instead of failing with
-    a line the log can show.
+    Two safety nets are forced onto the DSN. connect_timeout bounds the
+    initial dial. The keepalives matter more: serverless Postgres kills
+    connections that idle, and ours idles for minutes at a time while a
+    model retries 503s — a checkpoint write then lands on a dead socket and,
+    without keepalives, blocks until the job timeout shoots the whole run
+    (observed at 29 minutes on 2026-08-26). With them, a lost connection is
+    detected in under a minute and the run fails fast and rerunnable.
     """
     dsn = os.getenv("DIRECT_DATABASE_URL") or os.getenv("DATABASE_URL")
-    if dsn and "connect_timeout=" not in dsn:
-        dsn += ("&" if "?" in dsn else "?") + "connect_timeout=15"
+    if not dsn:
+        return None
+    guards = {
+        "connect_timeout": "15",
+        "keepalives": "1",
+        "keepalives_idle": "30",
+        "keepalives_interval": "10",
+        "keepalives_count": "3",
+    }
+    for name, value in guards.items():
+        if f"{name}=" not in dsn:
+            dsn += ("&" if "?" in dsn else "?") + f"{name}={value}"
     return dsn

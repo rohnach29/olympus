@@ -12,6 +12,7 @@ from station.nodes.check import (
 )
 
 FACTS = {
+    "morning_of": "Sunday 2026-08-16",
     "verdict": {"recovery": 76, "band": "recovered"},
     "night": {"asleep": "6h52m", "deep_min": 79, "score": 87, "bedtime": "23:22"},
     "yesterday": {
@@ -130,6 +131,13 @@ class TestCheckScript:
         script = "You slept six hours fifty-two minutes."
         numbers = [claim("six hours fifty-two minutes", 397, "night.asleep")]
         assert check_script(script, numbers, FACTS) != []
+
+    def test_the_dateline_can_be_declared_against_morning_of(self):
+        # "August sixteenth, twenty twenty-six" — the day and year are numbers
+        # like any other; a real run lost a rewrite to leaving them undeclared.
+        script = "It is August sixteenth, twenty twenty-six. A fine morning."
+        numbers = [claim("twenty twenty-six", 2026, "morning_of")]
+        assert check_script(script, numbers, FACTS) == []
 
     def test_a_workout_duration_can_be_quoted_from_its_list(self):
         script = "You gave it forty-four minutes on the mat."
