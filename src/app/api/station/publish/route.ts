@@ -77,9 +77,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "audioBase64 decoded to nothing" }, { status: 400 });
       }
       // A fixed pathname per morning, overwritten on re-runs, so a re-press
-      // never orphans a blob that nothing points at any more.
+      // never orphans a blob that nothing points at any more. Private: this
+      // is a person's health narrated aloud, so the blob URL alone must not
+      // play it — the page streams it through the authenticated audio route.
       const uploaded = await put(`station/${body.airDate}.mp3`, bytes, {
-        access: "public",
+        access: "private",
         addRandomSuffix: false,
         allowOverwrite: true,
         contentType: "audio/mpeg",

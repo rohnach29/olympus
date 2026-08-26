@@ -169,7 +169,11 @@ export default async function StationPage({
 
         {episode ? (
           <Turntable
-            audioUrl={episode.audioUrl}
+            // The blob URL is a private handle; playback goes through the
+            // authenticated audio route so only the listener can drop the needle.
+            audioUrl={
+              episode.audioUrl ? `/api/station/audio/${episode.airDate}` : null
+            }
             durationS={episode.audioDurationS}
             status={episode.status}
             airDate={episode.airDate}
