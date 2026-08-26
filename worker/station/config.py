@@ -102,5 +102,12 @@ def checkpoint_dsn() -> str | None:
     Postgres rather than SQLite because the Actions runner is destroyed after
     every run: a local file would take the resume point with it. DIRECT_ is
     preferred since the checkpointer issues DDL on first use.
+
+    A connect_timeout is forced onto the DSN: without one, a wedged or
+    unreachable database makes the run hang silently instead of failing with
+    a line the log can show.
     """
-    return os.getenv("DIRECT_DATABASE_URL") or os.getenv("DATABASE_URL")
+    dsn = os.getenv("DIRECT_DATABASE_URL") or os.getenv("DATABASE_URL")
+    if dsn and "connect_timeout=" not in dsn:
+        dsn += ("&" if "?" in dsn else "?") + "connect_timeout=15"
+    return dsn

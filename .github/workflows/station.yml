@@ -36,7 +36,14 @@ concurrency:
 jobs:
   press-run:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Worst case is both TTS engines retrying through their full budgets; 20
+    # was too tight once real timeouts stacked up.
+    timeout-minutes: 30
+    env:
+      # Actions gives Python a pipe, not a tty, so stdout is block-buffered:
+      # a hung run shows NOTHING for its whole life. Unbuffered, the log
+      # streams live and a cancellation still says where it stopped.
+      PYTHONUNBUFFERED: "1"
 
     steps:
       - uses: actions/checkout@v4
